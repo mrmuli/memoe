@@ -34,8 +34,10 @@ pnpm-debug.log*
 *.sqlite3
 cockroach-data/
 
+# Planning notes
+ideas/
+
 # OS and editor files
 .DS_Store
 .idea/
 .vscode/
-
