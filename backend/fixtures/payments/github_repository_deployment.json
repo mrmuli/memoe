@@ -1,0 +1,98 @@
+[
+  {
+    "id": 8801001,
+    "node_id": "DE_kwDOPaymentsApi8801001",
+    "repository_full_name": "mrmuli/payments-api",
+    "commit_sha": "9f2c6b8d0a7f4b1e8c3d2a1f0b9e7c6d5a4f3210",
+    "created_at": "2026-08-08T09:50:00Z",
+    "updated_at": "2026-08-08T09:53:22Z",
+    "creator": {
+      "login": "sre-release-bot",
+      "type": "Bot"
+    },
+    "description": "Deploy payments-api v2.8.4 to production.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T09:53:22Z",
+      "description": "Deployment completed successfully.",
+      "environment_url": "https://payments.example.com"
+    },
+    "payload": "{\"service\":\"payments\",\"component\":\"payments-api\",\"version\":\"v2.8.4\",\"deployment_source\":\"payments-api\",\"change_type\":\"application\"}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy"
+  },
+  {
+    "id": 8801002,
+    "node_id": "DE_kwDOPaymentsInfra8801002",
+    "repository_full_name": "mrmuli/payments-infra",
+    "commit_sha": "5d8e2c7a4b1f0e9d3c6a2b8f7e1d0c9b4a3f2109",
+    "created_at": "2026-08-08T10:00:00Z",
+    "updated_at": "2026-08-08T10:04:37Z",
+    "creator": {
+      "login": "platform-release-bot",
+      "type": "Bot"
+    },
+    "description": "Apply payments infrastructure changes for production cache and gateway routing.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T10:04:37Z",
+      "description": "Infrastructure deployment completed successfully.",
+      "environment_url": "https://payments.example.com"
+    },
+    "payload": "{\"service\":\"payments\",\"component\":\"payments-infra\",\"version\":\"infra-2026.08.08-1\",\"deployment_source\":\"payments-infra\",\"change_type\":\"infrastructure\",\"changed_resources\":[\"checkout-cache-timeout\",\"payment-gateway-route\"]}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy"
+  },
+  {
+    "id": 8801003,
+    "node_id": "DE_kwDONotifications8801003",
+    "repository_full_name": "mrmuli/notifications-service",
+    "commit_sha": "7a3e1d9c5b2f4a8e6d0c1b3a9f8e7d6c5b4a3210",
+    "created_at": "2026-08-08T10:20:00Z",
+    "updated_at": "2026-08-08T10:22:14Z",
+    "creator": {
+      "login": "release-bot",
+      "type": "Bot"
+    },
+    "description": "Deploy notifications-service v1.14.0 to production.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T10:22:14Z",
+      "description": "Deployment completed successfully.",
+      "environment_url": "https://notifications.example.com"
+    },
+    "payload": "{\"service\":\"notifications\",\"component\":\"notifications-service\",\"version\":\"v1.14.0\",\"deployment_source\":\"notifications-service\",\"change_type\":\"application\"}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy"
+  },
+  {
+    "id": 8801004,
+    "node_id": "DE_kwDOPaymentsApi8801004",
+    "repository_full_name": "mrmuli/payments-api",
+    "commit_sha": "2c1f9e8d7a6b5c4d3e2f1a0b9c8d7e6f5a4b3210",
+    "created_at": "2026-08-08T10:40:00Z",
+    "updated_at": "2026-08-08T10:43:05Z",
+    "creator": {
+      "login": "sre-release-bot",
+      "type": "Bot"
+    },
+    "description": "Deploy payments-api v2.8.5 to production with routine dependency updates.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T10:43:05Z",
+      "description": "Deployment completed successfully.",
+      "environment_url": "https://payments.example.com"
+    },
+    "payload": "{\"service\":\"payments\",\"component\":\"payments-api\",\"version\":\"v2.8.5\",\"deployment_source\":\"payments-api\",\"change_type\":\"application\",\"change_summary\":\"routine dependency updates\"}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy"
+  }
+]

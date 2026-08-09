@@ -1,0 +1,46 @@
+[
+  {
+    "id": "10081",
+    "key": "PAY-243",
+    "project_id": "10010",
+    "project_key": "PAY",
+    "created": "2026-08-08T10:27:00Z",
+    "updated": "2026-08-08T10:34:00Z",
+    "creator_display_name": "Support Operations",
+    "assignee_display_name": "Payments On Call",
+    "status": "Investigating",
+    "status_category": "In Progress",
+    "priority": "High",
+    "issue_type": "Production Incident",
+    "summary": "Customers report checkout timeouts and slow payment confirmation",
+    "description": "Support has received multiple customer reports that checkout payment confirmation is timing out or taking longer than usual in production.",
+    "labels": [
+      "service:payments",
+      "environment:production",
+      "customer-impact",
+      "checkout",
+      "latency"
+    ]
+  },
+  {
+    "id": "10082",
+    "key": "HELP-991",
+    "project_id": "10022",
+    "project_key": "HELP",
+    "created": "2026-08-08T10:32:00Z",
+    "updated": "2026-08-08T10:36:00Z",
+    "creator_display_name": "Customer Support",
+    "assignee_display_name": "Helpdesk Triage",
+    "status": "Open",
+    "status_category": "To Do",
+    "priority": "Medium",
+    "issue_type": "Support Request",
+    "summary": "User asks how to update notification preferences",
+    "description": "A user contacted support asking where to update email notification preferences.",
+    "labels": [
+      "service:notifications",
+      "how-to",
+      "account-settings"
+    ]
+  }
+]
