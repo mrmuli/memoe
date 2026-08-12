@@ -46,6 +46,20 @@ class StoredObservation:
     evidence: list[dict[str, Any]]
 
 
+@dataclass(frozen=True)
+class ObservationSummary:
+    """Compact observation row for CLI lists."""
+
+    id: str
+    service_slug: str
+    created_at: str
+    model_id: str
+    observation_type: str
+    confidence: float
+    evidence_quality_rating: str
+    statement: str
+
+
 def run_observation(
     service_slug: str,
     provider_name: str,
@@ -397,3 +411,52 @@ def latest_observation(settings: Settings | None = None) -> StoredObservation | 
             for row in evidence
         ],
     )
+
+
+def list_observations(
+    service_slug: str | None = None,
+    limit: int = 10,
+    settings: Settings | None = None,
+) -> list[ObservationSummary]:
+    """List recent stored observations."""
+    resolved_settings = settings or Settings()
+    query = """
+        SELECT
+          o.id,
+          s.slug AS service_slug,
+          o.created_at,
+          r.model_id,
+          o.observation_type,
+          o.confidence,
+          COALESCE(o.evidence_quality->>'rating', 'unknown') AS evidence_quality_rating,
+          o.statement
+        FROM observations o
+        JOIN services s ON s.id = o.service_id
+        JOIN observation_runs r ON r.id = o.observation_run_id
+    """
+    params: list[Any] = []
+    if service_slug:
+        query += " WHERE s.slug = %s"
+        params.append(service_slug)
+
+    query += " ORDER BY o.created_at DESC LIMIT %s"
+    params.append(limit)
+
+    with connect(resolved_settings) as connection:
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+    return [
+        ObservationSummary(
+            id=str(row["id"]),
+            service_slug=str(row["service_slug"]),
+            created_at=row["created_at"].isoformat(),
+            model_id=str(row["model_id"]),
+            observation_type=str(row["observation_type"]),
+            confidence=float(row["confidence"]),
+            evidence_quality_rating=str(row["evidence_quality_rating"]),
+            statement=str(row["statement"]),
+        )
+        for row in rows
+    ]

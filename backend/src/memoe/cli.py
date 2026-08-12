@@ -155,3 +155,35 @@ def observations_show(
                 ]
             )
         )
+
+
+@observations_app.command("list")
+def observations_list(
+    service: Annotated[
+        str | None,
+        typer.Option(help="Optional service slug filter, e.g. payments."),
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Maximum number of observations to show.")] = 10,
+) -> None:
+    """List recent stored observations."""
+    from memoe.services.observation_runner import list_observations
+
+    rows = list_observations(service_slug=service, limit=limit, settings=Settings())
+    if not rows:
+        typer.echo("No observations found.")
+        return
+
+    for row in rows:
+        typer.echo(
+            " | ".join(
+                [
+                    row.created_at,
+                    row.service_slug,
+                    row.model_id,
+                    row.observation_type,
+                    f"confidence={row.confidence}",
+                    f"quality={row.evidence_quality_rating}",
+                    row.statement,
+                ]
+            )
+        )
