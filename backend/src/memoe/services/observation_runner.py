@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 
 from memoe.config import Settings
 from memoe.db.connection import connect
+from memoe.providers.bedrock import BedrockObservationProvider
 from memoe.providers.observations import ObservationRequest, ObservationResult
 from memoe.providers.ollama import OllamaObservationProvider
 
@@ -67,8 +68,8 @@ def run_observation(
 ) -> ObservationRunResult:
     """Run observation generation for one service."""
     resolved_settings = settings or Settings()
-    if provider_name != "ollama":
-        raise ValueError(f"Unsupported observation provider: {provider_name}")
+    provider = create_observation_provider(provider_name, resolved_settings)
+    model_id = resolve_model_id(provider_name, resolved_settings)
 
     with connect(resolved_settings) as connection:
         service = fetch_service(connection, service_slug)
@@ -90,11 +91,10 @@ def run_observation(
             service_id=service["id"],
             procedure=procedure,
             provider=provider_name,
-            model_id=resolved_settings.ollama_model or "unknown",
+            model_id=model_id,
             request_payload=request_payload,
         )
 
-    provider = OllamaObservationProvider(resolved_settings)
     request = ObservationRequest(
         procedure_name=str(procedure["name"]),
         procedure_version=int(procedure["version"]),
@@ -130,6 +130,26 @@ def run_observation(
         rejected_evidence_ids=result.rejected_evidence_ids,
         limitations=result.limitations,
     )
+
+
+def resolve_model_id(provider_name: str, settings: Settings) -> str:
+    """Return the configured model ID for a provider."""
+    if provider_name == "ollama":
+        return settings.ollama_model or "unknown"
+    if provider_name == "bedrock":
+        return settings.bedrock_model_id or "unknown"
+
+    raise ValueError(f"Unsupported observation provider: {provider_name}")
+
+
+def create_observation_provider(provider_name: str, settings: Settings):
+    """Create an observation provider from its CLI/config name."""
+    if provider_name == "ollama":
+        return OllamaObservationProvider(settings)
+    if provider_name == "bedrock":
+        return BedrockObservationProvider(settings)
+
+    raise ValueError(f"Unsupported observation provider: {provider_name}")
 
 
 def fetch_service(connection, service_slug: str) -> dict[str, Any]:
@@ -343,52 +363,51 @@ def mark_observation_run_failed(connection, run_id: str, error_message: str) -> 
 def latest_observation(settings: Settings | None = None) -> StoredObservation | None:
     """Fetch the latest stored observation."""
     resolved_settings = settings or Settings()
-    with connect(resolved_settings) as connection:
-        with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT
-                  o.id,
-                  s.slug AS service_slug,
-                  o.statement,
-                  o.observation_type,
-                  o.confidence,
-                  o.evidence_quality,
-                  o.limitations,
-                  o.reasoning_summary,
-                  r.model_id,
-                  r.procedure_name,
-                  r.procedure_version
-                FROM observations o
-                JOIN services s ON s.id = o.service_id
-                JOIN observation_runs r ON r.id = o.observation_run_id
-                ORDER BY o.created_at DESC
-                LIMIT 1
-                """
-            )
-            observation = cursor.fetchone()
-            if not observation:
-                return None
+    with connect(resolved_settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            """
+            SELECT
+              o.id,
+              s.slug AS service_slug,
+              o.statement,
+              o.observation_type,
+              o.confidence,
+              o.evidence_quality,
+              o.limitations,
+              o.reasoning_summary,
+              r.model_id,
+              r.procedure_name,
+              r.procedure_version
+            FROM observations o
+            JOIN services s ON s.id = o.service_id
+            JOIN observation_runs r ON r.id = o.observation_run_id
+            ORDER BY o.created_at DESC
+            LIMIT 1
+            """
+        )
+        observation = cursor.fetchone()
+        if not observation:
+            return None
 
-            cursor.execute(
-                """
-                SELECT
-                  oe.role,
-                  e.id,
-                  e.occurred_at,
-                  e.category,
-                  e.event_type,
-                  e.component,
-                  e.summary,
-                  e.source_table
-                FROM observation_evidence oe
-                JOIN events e ON e.id = oe.event_id
-                WHERE oe.observation_id = %s
-                ORDER BY e.occurred_at, oe.role
-                """,
-                (observation["id"],),
-            )
-            evidence = [dict(row) for row in cursor.fetchall()]
+        cursor.execute(
+            """
+            SELECT
+              oe.role,
+              e.id,
+              e.occurred_at,
+              e.category,
+              e.event_type,
+              e.component,
+              e.summary,
+              e.source_table
+            FROM observation_evidence oe
+            JOIN events e ON e.id = oe.event_id
+            WHERE oe.observation_id = %s
+            ORDER BY e.occurred_at, oe.role
+            """,
+            (observation["id"],),
+        )
+        evidence = [dict(row) for row in cursor.fetchall()]
 
     return StoredObservation(
         id=str(observation["id"]),
@@ -442,10 +461,9 @@ def list_observations(
     query += " ORDER BY o.created_at DESC LIMIT %s"
     params.append(limit)
 
-    with connect(resolved_settings) as connection:
-        with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
+    with connect(resolved_settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
 
     return [
         ObservationSummary(

@@ -27,6 +27,9 @@ def config() -> None:
     typer.echo(f"OLLAMA_BASE_URL={settings.ollama_base_url or ''}")
     typer.echo(f"OLLAMA_MODEL={settings.ollama_model or ''}")
     typer.echo(f"OLLAMA_API_KEY_SET={bool(settings.ollama_api_key)}")
+    typer.echo(f"AWS_REGION={settings.aws_region or ''}")
+    typer.echo(f"AWS_PROFILE={settings.aws_profile or ''}")
+    typer.echo(f"BEDROCK_MODEL_ID={settings.bedrock_model_id or ''}")
 
 
 @database_app.command("init")
@@ -95,7 +98,11 @@ def observations_run(
 
     settings = Settings()
     selected_provider = provider or settings.observation_provider
-    result = run_observation(service, selected_provider, settings)
+    try:
+        result = run_observation(service, selected_provider, settings)
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=1) from error
 
     typer.echo(f"Observation run: {result.run_id}")
     typer.echo(f"Observation: {result.observation_id}")
