@@ -94,8 +94,11 @@ Procedure:
    - Avoid "caused", "introduced", "resulted in", or "indicating a deployment impact" unless there is direct evidence such as rollback recovery, error traces, linked incident RCA, or repeated historical pattern.
 7. Cite evidence IDs for every important claim.
 8. State limitations and missing evidence.
-9. If evidence only shows timing relationships, describe the observation as a correlation or hypothesis, not a confirmed impact.
-10. Return only valid JSON matching the output schema.
+9. Respect chronology.
+   - Do not suggest deployment impact if degradation signals, error telemetry, or customer outcomes began before the deployment, unless there is explicit evidence that the deployment or rollout had already started earlier.
+   - If a deployment happened after the degradation started, treat it as unrelated, recovery-context, or inconclusive unless later evidence clearly links it.
+10. If evidence only shows timing relationships, describe the observation as a correlation or hypothesis, not a confirmed impact.
+11. Return only valid JSON matching the output schema.
 """
 
 
