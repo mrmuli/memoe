@@ -15,10 +15,10 @@ from memoe.config import Settings
 from memoe.db.connection import connect
 from memoe.normalizers import NormalizedEvent, normalize_row
 
-
 FIXTURE_ROOT = Path(__file__).resolve().parents[3] / "fixtures"
 SOURCE_TABLE_FILES = {
     "aws_cloudwatch_alarm": "aws_cloudwatch_alarm.json",
+    "aws_cloudwatch_log_event": "aws_cloudwatch_log_event.json",
     "github_repository_deployment": "github_repository_deployment.json",
     "github_pull_request": "github_pull_request.json",
     "jira_issue": "jira_issue.json",
@@ -82,12 +82,12 @@ Apply these procedural skills when relevant:
 
 Procedure:
 1. Separate facts from interpretation.
-2. Consider operational signals, operational events, and operational outcomes.
+2. Consider operational signals, operational events, operational outcomes, and telemetry.
 3. Identify which evidence supports a possible relationship.
 4. Identify which evidence appears unrelated or insufficient.
 5. Assess evidence quality before writing the observation.
    - Rate the evidence as strong, moderate, limited, or insufficient.
-   - Identify evidence strengths, such as aligned signal/event/outcome timing, service-scoped source mapping, relevant component context, or customer-impact evidence.
+   - Identify evidence strengths, such as aligned signal/event/outcome timing, service-scoped source mapping, relevant component context, telemetry showing request/dependency errors, or customer-impact evidence.
    - Identify evidence gaps, such as missing telemetry, logs, traces, rollback/recovery data, historical recurrence, RCA links, or architecture documentation.
 6. Use cautious causal language.
    - Prefer "temporally associated with", "consistent with", "may have contributed to", or "possible deployment impact".
@@ -135,11 +135,11 @@ def load_fixture_rows(scenario: str) -> list[tuple[str, dict[str, Any]]]:
         fixture_path = scenario_path / file_name
         data = json.loads(fixture_path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
-            raise ValueError(f"Fixture must contain a JSON array: {fixture_path}")
+            raise TypeError(f"Fixture must contain a JSON array: {fixture_path}")
 
         for row in data:
             if not isinstance(row, dict):
-                raise ValueError(f"Fixture row must be a JSON object: {fixture_path}")
+                raise TypeError(f"Fixture row must be a JSON object: {fixture_path}")
             rows.append((source_table, row))
 
     return rows
@@ -174,6 +174,10 @@ def event_source_identity(event: NormalizedEvent) -> tuple[str, str, str, str]:
             str(event.metadata["name"]),
             str(event.metadata["arn"]),
         )
+
+    if event.source_table == "aws_cloudwatch_log_event":
+        log_group_name = str(event.metadata["log_group_name"])
+        return ("aws_cloudwatch", "cloudwatch_log_group", log_group_name, log_group_name)
 
     if event.source_table in {"github_repository_deployment", "github_pull_request"}:
         repository = str(event.metadata["repository_full_name"])
@@ -356,27 +360,26 @@ def load_seed_scenario(scenario: str, settings: Settings | None = None) -> SeedR
 
 def list_evidence(service_slug: str, settings: Settings | None = None) -> list[EvidenceRow]:
     """List normalized evidence for a service."""
-    with connect(settings) as connection:
-        with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(
-                """
-                SELECT
-                  e.id,
-                  s.slug AS service_slug,
-                  e.occurred_at,
-                  e.category,
-                  e.event_type,
-                  e.component,
-                  e.summary,
-                  e.source_table
-                FROM events e
-                JOIN services s ON s.id = e.service_id
-                WHERE s.slug = %s
-                ORDER BY e.occurred_at, e.source_table
-                """,
-                (service_slug,),
-            )
-            rows = cursor.fetchall()
+    with connect(settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            """
+            SELECT
+              e.id,
+              s.slug AS service_slug,
+              e.occurred_at,
+              e.category,
+              e.event_type,
+              e.component,
+              e.summary,
+              e.source_table
+            FROM events e
+            JOIN services s ON s.id = e.service_id
+            WHERE s.slug = %s
+            ORDER BY e.occurred_at, e.source_table
+            """,
+            (service_slug,),
+        )
+        rows = cursor.fetchall()
 
     return [
         EvidenceRow(

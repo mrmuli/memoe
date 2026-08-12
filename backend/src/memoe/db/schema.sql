@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS events (
   metadata JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (source_table, source_id),
-  CONSTRAINT events_category_check CHECK (category IN ('signal', 'event', 'outcome'))
+  CONSTRAINT events_category_check CHECK (category IN ('signal', 'event', 'outcome', 'telemetry'))
 );
 
 CREATE INDEX IF NOT EXISTS events_service_occurred_at_idx
@@ -52,6 +52,11 @@ CREATE INDEX IF NOT EXISTS events_category_event_type_idx
 ALTER TABLE event_sources ADD COLUMN IF NOT EXISTS component STRING NULL;
 
 ALTER TABLE events ADD COLUMN IF NOT EXISTS component STRING NULL;
+
+ALTER TABLE events DROP CONSTRAINT IF EXISTS events_category_check;
+
+ALTER TABLE events ADD CONSTRAINT events_category_check
+  CHECK (category IN ('signal', 'event', 'outcome', 'telemetry'));
 
 CREATE TABLE IF NOT EXISTS procedures (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

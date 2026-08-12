@@ -29,14 +29,14 @@ class NormalizedEvent:
 
 def parse_timestamp(value: str) -> datetime:
     """Parse fixture timestamps into timezone-aware datetimes."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return datetime.fromisoformat(value)
 
 
 def memoe_identity(row: dict[str, Any]) -> dict[str, str]:
     """Return demo identity metadata embedded in fixture rows."""
     identity = row.get("_memoe")
     if not isinstance(identity, dict):
-        raise ValueError("Fixture row is missing required _memoe identity metadata.")
+        raise TypeError("Fixture row is missing required _memoe identity metadata.")
 
     required_keys = ("service_slug", "component", "environment")
     missing = [key for key in required_keys if not identity.get(key)]
@@ -71,6 +71,44 @@ def normalize_cloudwatch_alarm(row: dict[str, Any]) -> NormalizedEvent:
         correlation_identifiers={
             "alarm_name": row.get("name"),
             "dimensions": row.get("dimensions", []),
+        },
+        metadata=row,
+    )
+
+
+def normalize_cloudwatch_log_event(row: dict[str, Any]) -> NormalizedEvent:
+    """Normalize an aws_cloudwatch_log_event row."""
+    identity = memoe_identity(row)
+    message_json = row.get("message_json") if isinstance(row.get("message_json"), dict) else {}
+    event_name = str(
+        message_json.get("event.name")
+        or message_json.get("event_name")
+        or message_json.get("event.action")
+        or "log_event"
+    )
+    severity = str(message_json.get("severity_text") or message_json.get("level") or "").lower()
+
+    return NormalizedEvent(
+        service_slug=identity["service_slug"],
+        component=identity["component"],
+        environment=identity["environment"],
+        source_table="aws_cloudwatch_log_event",
+        source_id=str(row["event_id"]),
+        source_type="cloudwatch_log_group",
+        category="telemetry",
+        event_type=event_name,
+        occurred_at=parse_timestamp(str(row["timestamp"])),
+        severity=severity or None,
+        summary=str(row["message"]),
+        external_reference=str(row["log_group_name"]),
+        correlation_identifiers={
+            "log_group_name": row.get("log_group_name"),
+            "log_stream_name": row.get("log_stream_name"),
+            "trace_id": message_json.get("trace_id") or message_json.get("trace.id"),
+            "span_id": message_json.get("span_id") or message_json.get("span.id"),
+            "http_route": message_json.get("http.route"),
+            "http_response_status_code": message_json.get("http.response.status_code"),
+            "error_type": message_json.get("error.type"),
         },
         metadata=row,
     )
@@ -154,6 +192,7 @@ def normalize_jira_issue(row: dict[str, Any]) -> NormalizedEvent:
 
 NORMALIZERS = {
     "aws_cloudwatch_alarm": normalize_cloudwatch_alarm,
+    "aws_cloudwatch_log_event": normalize_cloudwatch_log_event,
     "github_repository_deployment": normalize_github_repository_deployment,
     "github_pull_request": normalize_github_pull_request,
     "jira_issue": normalize_jira_issue,
@@ -168,4 +207,3 @@ def normalize_row(source_table: str, row: dict[str, Any]) -> NormalizedEvent:
         raise ValueError(f"No normalizer registered for source table: {source_table}") from error
 
     return normalizer(row)
-
