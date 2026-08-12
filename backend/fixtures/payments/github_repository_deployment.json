@@ -21,7 +21,12 @@
     "payload": "{\"service\":\"payments\",\"component\":\"payments-api\",\"version\":\"v2.8.4\",\"deployment_source\":\"payments-api\",\"change_type\":\"application\"}",
     "ref": "main",
     "state": "success",
-    "task": "deploy"
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "payments-api",
+      "environment": "production"
+    }
   },
   {
     "id": 8801002,
@@ -45,7 +50,12 @@
     "payload": "{\"service\":\"payments\",\"component\":\"payments-infra\",\"version\":\"infra-2026.08.08-1\",\"deployment_source\":\"payments-infra\",\"change_type\":\"infrastructure\",\"changed_resources\":[\"checkout-cache-timeout\",\"payment-gateway-route\"]}",
     "ref": "main",
     "state": "success",
-    "task": "deploy"
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "payments-infra",
+      "environment": "production"
+    }
   },
   {
     "id": 8801003,
@@ -69,7 +79,12 @@
     "payload": "{\"service\":\"notifications\",\"component\":\"notifications-service\",\"version\":\"v1.14.0\",\"deployment_source\":\"notifications-service\",\"change_type\":\"application\"}",
     "ref": "main",
     "state": "success",
-    "task": "deploy"
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "notifications-service",
+      "environment": "production"
+    }
   },
   {
     "id": 8801004,
@@ -93,6 +108,11 @@
     "payload": "{\"service\":\"payments\",\"component\":\"payments-api\",\"version\":\"v2.8.5\",\"deployment_source\":\"payments-api\",\"change_type\":\"application\",\"change_summary\":\"routine dependency updates\"}",
     "ref": "main",
     "state": "success",
-    "task": "deploy"
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "payments-api",
+      "environment": "production"
+    }
   }
 ]

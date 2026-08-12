@@ -38,7 +38,12 @@
       }
     ],
     "url": "https://github.com/mrmuli/payments-infra/pull/417",
-    "permalink": "https://github.com/mrmuli/payments-infra/pull/417"
+    "permalink": "https://github.com/mrmuli/payments-infra/pull/417",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "payments-infra",
+      "environment": "production"
+    }
   },
   {
     "id": 12045002,
@@ -76,6 +81,11 @@
       }
     ],
     "url": "https://github.com/mrmuli/notifications-service/pull/118",
-    "permalink": "https://github.com/mrmuli/notifications-service/pull/118"
+    "permalink": "https://github.com/mrmuli/notifications-service/pull/118",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "notifications-service",
+      "environment": "production"
+    }
   }
 ]

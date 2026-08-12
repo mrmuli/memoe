@@ -20,7 +20,12 @@
       "customer-impact",
       "checkout",
       "latency"
-    ]
+    ],
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout",
+      "environment": "production"
+    }
   },
   {
     "id": "10082",
@@ -41,6 +46,11 @@
       "service:notifications",
       "how-to",
       "account-settings"
-    ]
+    ],
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "notification-preferences",
+      "environment": "production"
+    }
   }
 ]

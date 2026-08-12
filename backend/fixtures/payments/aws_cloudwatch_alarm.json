@@ -30,7 +30,12 @@
     "actions_enabled": true,
     "region": "eu-west-1",
     "account_id": "123456789012",
-    "_memoe_occurred_at": "2026-08-08T10:11:00Z"
+    "_memoe_occurred_at": "2026-08-08T10:11:00Z",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout-latency-slo",
+      "environment": "production"
+    }
   },
   {
     "name": "notifications-delivery-delay-warning",
@@ -63,6 +68,11 @@
     "actions_enabled": true,
     "region": "eu-west-1",
     "account_id": "123456789012",
-    "_memoe_occurred_at": "2026-08-08T10:18:00Z"
+    "_memoe_occurred_at": "2026-08-08T10:18:00Z",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "delivery-latency-slo",
+      "environment": "production"
+    }
   }
 ]
