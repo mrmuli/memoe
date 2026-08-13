@@ -28,5 +28,5 @@ class Settings(BaseSettings):
     aws_region: str | None = None
     aws_profile: str | None = None
     bedrock_model_id: str | None = None
-    bedrock_max_tokens: int = 1200
+    bedrock_max_tokens: int = 4096
     bedrock_temperature: float = 0

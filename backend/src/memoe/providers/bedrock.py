@@ -80,6 +80,11 @@ def response_text(response: dict[str, Any]) -> str:
     content_blocks = response["output"]["message"]["content"]
     text_blocks = [block["text"] for block in content_blocks if "text" in block]
     if not text_blocks:
-        raise ValueError("Bedrock response did not contain text content.")
+        block_types = sorted({key for block in content_blocks for key in block})
+        stop_reason = response.get("stopReason", "unknown")
+        raise ValueError(
+            "Bedrock response did not contain text content. "
+            f"stopReason={stop_reason}; content block types={', '.join(block_types) or 'none'}."
+        )
 
     return "\n".join(text_blocks)
