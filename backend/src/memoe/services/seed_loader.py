@@ -97,8 +97,12 @@ Procedure:
 9. Respect chronology.
    - Do not suggest deployment impact if degradation signals, error telemetry, or customer outcomes began before the deployment, unless there is explicit evidence that the deployment or rollout had already started earlier.
    - If a deployment happened after the degradation started, treat it as unrelated, recovery-context, or inconclusive unless later evidence clearly links it.
-10. If evidence only shows timing relationships, describe the observation as a correlation or hypothesis, not a confirmed impact.
-11. Return only valid JSON matching the output schema.
+10. Treat negative conclusions as evidence-backed hypotheses.
+   - Do not claim that a deployment, service, dependency, or change "was not the cause" unless the evidence includes direct exclusionary support, such as healthy post-change telemetry, rollback/roll-forward comparison, deployment logs, trace-level path evidence, or a stronger alternate cause.
+   - If the main evidence is only that the event occurred after the degradation began, say it is unlikely to explain the start of degradation, not that it was not the cause.
+   - Rate evidence quality below strong when ruling something out depends mainly on missing evidence or timestamp ordering.
+11. If evidence only shows timing relationships, describe the observation as a correlation or hypothesis, not a confirmed impact.
+12. Return only valid JSON matching the output schema.
 """
 
 
