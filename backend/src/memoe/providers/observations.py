@@ -32,6 +32,7 @@ class ObservationResult:
     reasoning_summary: str
     raw_output: dict
     model_id: str
+    extra_fields: dict
 
 
 class ObservationProvider(Protocol):
@@ -54,6 +55,8 @@ Use this stored procedure:
 Return only valid JSON matching this schema:
 
 {json.dumps(request.output_schema, indent=2)}
+
+Include every field listed in the schema's required array. Do not omit required fields.
 """
 
 
@@ -123,3 +126,21 @@ def validate_observation_payload(payload: dict, provider_name: str) -> None:
 
     if not isinstance(payload["evidence_quality"], dict):
         raise TypeError(f"{provider_name} response field must be an object: evidence_quality")
+
+
+def validate_output_schema_required_fields(
+    payload: dict,
+    output_schema: dict,
+    provider_name: str,
+) -> None:
+    """Validate that the provider included every schema-required field."""
+    required = output_schema.get("required", [])
+    if not isinstance(required, list):
+        return
+
+    missing = sorted(str(field) for field in required if field not in payload)
+    if missing:
+        raise ValueError(
+            f"{provider_name} response is missing output-schema required fields: "
+            f"{', '.join(missing)}"
+        )

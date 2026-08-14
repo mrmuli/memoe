@@ -27,6 +27,7 @@ class ReflectionRunResult:
     statement: str
     confidence: float
     evidence_quality: dict[str, Any]
+    details: dict[str, Any]
     supporting_observation_ids: list[str]
     rejected_observation_ids: list[str]
     limitations: list[str]
@@ -88,6 +89,7 @@ def run_reflection(
     try:
         result = provider.generate_observation(request)
         validate_observation_ids(result, observations)
+        validate_reflection_quality(result, observations)
         with connect(resolved_settings) as connection:
             reflection_id = persist_reflection_result(
                 connection=connection,
@@ -107,6 +109,7 @@ def run_reflection(
         statement=result.statement,
         confidence=result.confidence,
         evidence_quality=result.evidence_quality,
+        details=result.extra_fields,
         supporting_observation_ids=result.supporting_evidence_ids,
         rejected_observation_ids=result.rejected_evidence_ids,
         limitations=result.limitations,
@@ -114,28 +117,50 @@ def run_reflection(
 
 
 def fetch_observation_bundle(connection, limit: int) -> list[dict[str, Any]]:
-    """Fetch recent observations as reflection evidence."""
+    """Fetch latest observations as reflection evidence."""
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
             """
+            WITH ranked_observations AS (
+              SELECT
+                o.id,
+                s.slug AS service_slug,
+                o.statement,
+                o.observation_type,
+                o.confidence,
+                o.evidence_quality,
+                o.limitations,
+                o.reasoning_summary,
+                o.created_at,
+                r.provider,
+                r.model_id,
+                r.procedure_name,
+                r.procedure_version,
+                row_number() OVER (
+                  PARTITION BY s.slug, r.model_id
+                  ORDER BY o.created_at DESC
+                ) AS rank
+              FROM observations o
+              JOIN services s ON s.id = o.service_id
+              JOIN observation_runs r ON r.id = o.observation_run_id
+            )
             SELECT
-              o.id,
-              s.slug AS service_slug,
-              o.statement,
-              o.observation_type,
-              o.confidence,
-              o.evidence_quality,
-              o.limitations,
-              o.reasoning_summary,
-              o.created_at,
-              r.provider,
-              r.model_id,
-              r.procedure_name,
-              r.procedure_version
-            FROM observations o
-            JOIN services s ON s.id = o.service_id
-            JOIN observation_runs r ON r.id = o.observation_run_id
-            ORDER BY o.created_at DESC
+              id,
+              service_slug,
+              statement,
+              observation_type,
+              confidence,
+              evidence_quality,
+              limitations,
+              reasoning_summary,
+              created_at,
+              provider,
+              model_id,
+              procedure_name,
+              procedure_version
+            FROM ranked_observations
+            WHERE rank = 1
+            ORDER BY created_at DESC
             LIMIT %s
             """,
             (limit,),
@@ -205,6 +230,37 @@ def validate_observation_ids(result: ObservationResult, observations: list[dict[
         raise ValueError(f"Model returned unknown observation IDs: {', '.join(unknown_ids)}")
 
 
+def validate_reflection_quality(result: ObservationResult, observations: list[dict[str, Any]]) -> None:
+    """Reject reflection outputs that overclaim from narrow evidence."""
+    observations_by_id = {row["id"]: row for row in observations}
+    supporting_observations = [
+        observations_by_id[observation_id]
+        for observation_id in result.supporting_evidence_ids
+        if observation_id in observations_by_id
+    ]
+    supporting_services = {row["service_slug"] for row in supporting_observations}
+    statement = result.statement.lower()
+    causal_overclaim_terms = (
+        " caused ",
+        " can introduce",
+        " can trigger",
+        " will cause",
+        " triggered ",
+        " is a pattern",
+    )
+    hypothesis_terms = ("hypothesis", "may indicate", "may suggest")
+
+    if (
+        len(supporting_services) <= 1
+        and any(term in statement for term in causal_overclaim_terms)
+        and not any(term in statement for term in hypothesis_terms)
+    ):
+        raise ValueError(
+            "Reflection overclaimed from single-service evidence. "
+            "Single-service reflections must be framed as a hypothesis."
+        )
+
+
 def persist_reflection_result(
     connection,
     run_id: str,
@@ -222,10 +278,11 @@ def persist_reflection_result(
           reflection_type,
           confidence,
           evidence_quality,
+          details,
           limitations,
           reasoning_summary
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
         """,
         (
@@ -235,6 +292,7 @@ def persist_reflection_result(
             result.observation_type,
             result.confidence,
             Jsonb(result.evidence_quality),
+            Jsonb(result.extra_fields),
             Jsonb(result.limitations),
             result.reasoning_summary,
         ),

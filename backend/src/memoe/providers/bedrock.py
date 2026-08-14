@@ -14,6 +14,7 @@ from memoe.providers.observations import (
     build_system_prompt,
     build_user_prompt,
     parse_json_content,
+    validate_output_schema_required_fields,
 )
 
 
@@ -33,6 +34,7 @@ class BedrockObservationProvider(ObservationProvider):
         raw_output = self._converse(request)
         content = response_text(raw_output)
         parsed = parse_json_content(content, "Bedrock")
+        validate_output_schema_required_fields(parsed, request.output_schema, "Bedrock")
 
         return ObservationResult(
             statement=str(parsed["statement"]),
@@ -45,6 +47,7 @@ class BedrockObservationProvider(ObservationProvider):
             reasoning_summary=str(parsed["reasoning_summary"]),
             raw_output=raw_output,
             model_id=str(self.settings.bedrock_model_id),
+            extra_fields=extra_fields(parsed),
         )
 
     def _converse(self, request: ObservationRequest) -> dict[str, Any]:
@@ -88,3 +91,18 @@ def response_text(response: dict[str, Any]) -> str:
         )
 
     return "\n".join(text_blocks)
+
+
+def extra_fields(payload: dict) -> dict:
+    """Return provider payload fields outside the shared observation contract."""
+    shared_fields = {
+        "statement",
+        "observation_type",
+        "confidence",
+        "evidence_quality",
+        "supporting_evidence_ids",
+        "rejected_evidence_ids",
+        "limitations",
+        "reasoning_summary",
+    }
+    return {key: value for key, value in payload.items() if key not in shared_fields}

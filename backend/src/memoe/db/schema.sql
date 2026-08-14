@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS observations (
   observation_type STRING NOT NULL,
   confidence DECIMAL NOT NULL,
   evidence_quality JSONB NOT NULL DEFAULT '{}'::JSONB,
+  details JSONB NOT NULL DEFAULT '{}'::JSONB,
   limitations JSONB NOT NULL DEFAULT '[]'::JSONB,
   reasoning_summary STRING NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -165,17 +166,12 @@ CREATE TABLE IF NOT EXISTS reflections (
   limitations JSONB NOT NULL DEFAULT '[]'::JSONB,
   reasoning_summary STRING NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT reflections_confidence_check CHECK (confidence >= 0 AND confidence <= 1),
-  CONSTRAINT reflections_type_check CHECK (
-    reflection_type IN (
-      'cross_service_risk',
-      'recurring_pattern',
-      'evidence_quality_gap',
-      'procedural_learning',
-      'inconclusive'
-    )
-  )
+  CONSTRAINT reflections_confidence_check CHECK (confidence >= 0 AND confidence <= 1)
 );
+
+ALTER TABLE reflections ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+ALTER TABLE reflections DROP CONSTRAINT IF EXISTS reflections_type_check;
 
 CREATE INDEX IF NOT EXISTS reflections_created_at_idx
   ON reflections (created_at);

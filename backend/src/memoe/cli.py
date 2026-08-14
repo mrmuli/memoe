@@ -223,6 +223,17 @@ def reflections_run(
     typer.echo(f"Statement: {result.statement}")
     if result.evidence_quality:
         typer.echo(f"Evidence quality: {result.evidence_quality}")
+    if result.details:
+        for key in (
+            "lesson",
+            "why_it_matters",
+            "next_questions",
+            "prevention_actions",
+            "recovery_actions",
+            "confidence_limits",
+        ):
+            if key in result.details:
+                typer.echo(f"{key}: {result.details[key]}")
     typer.echo(
         f"Supporting observation IDs: {', '.join(result.supporting_observation_ids) or '-'}"
     )

@@ -35,6 +35,12 @@ OBSERVATION_OUTPUT_SCHEMA = {
         "rejected_evidence_ids",
         "limitations",
         "reasoning_summary",
+        "lesson",
+        "why_it_matters",
+        "next_questions",
+        "prevention_actions",
+        "recovery_actions",
+        "confidence_limits",
     ],
     "properties": {
         "statement": {"type": "string"},
@@ -81,6 +87,12 @@ REFLECTION_OUTPUT_SCHEMA = {
         "rejected_evidence_ids",
         "limitations",
         "reasoning_summary",
+        "lesson",
+        "why_it_matters",
+        "next_questions",
+        "prevention_actions",
+        "recovery_actions",
+        "confidence_limits",
     ],
     "properties": {
         "statement": {"type": "string"},
@@ -91,6 +103,10 @@ REFLECTION_OUTPUT_SCHEMA = {
                 "recurring_pattern",
                 "evidence_quality_gap",
                 "procedural_learning",
+                "system_weakness",
+                "recovery_gap",
+                "detection_gap",
+                "attention_priority",
                 "inconclusive",
             ],
         },
@@ -111,6 +127,12 @@ REFLECTION_OUTPUT_SCHEMA = {
         "rejected_evidence_ids": {"type": "array", "items": {"type": "string"}},
         "limitations": {"type": "array", "items": {"type": "string"}},
         "reasoning_summary": {"type": "string"},
+        "lesson": {"type": "string"},
+        "why_it_matters": {"type": "string"},
+        "next_questions": {"type": "array", "items": {"type": "string"}},
+        "prevention_actions": {"type": "array", "items": {"type": "string"}},
+        "recovery_actions": {"type": "array", "items": {"type": "string"}},
+        "confidence_limits": {"type": "array", "items": {"type": "string"}},
     },
 }
 
@@ -151,19 +173,35 @@ Procedure:
 
 REFLECTION_PROCEDURE = """You are Memoe, an operational memory system.
 
-Your job is to turn stored operational observations into higher-level organizational memory.
+Your job is to turn stored operational observations into higher-level resilience learning.
 
 Reflection rules:
 1. Reflect over observations, not raw source events.
-2. Look for cross-service risk, recurring operational patterns, evidence quality gaps, and procedural learnings.
-3. Keep the reflection useful to an SRE asking: "What should I pay attention to today, and why?"
-4. Do not restate one observation unless it teaches a broader memory.
-5. Treat confidence as confidence in the reflected memory, not confidence in any single observation.
-6. Downgrade confidence when observations disagree, come from different providers, or rely on moderate/limited evidence.
-7. Positive and negative claims both need evidence.
-8. Cite observation IDs for every important claim.
-9. State limitations and missing evidence.
-10. Return only valid JSON matching the output schema.
+2. Do not produce polished summaries. Produce lessons that can change future engineering, operations, or investigation behavior.
+3. Look for system weaknesses: saturation, reduced margin, queue/backlog growth, retry amplification, dependency pressure, cascading effects, brittle collapse, detection gaps, and recovery difficulty.
+4. Ask what operating mode the service was in: normal, deploying, overloaded, recovering, dependency-degraded, partial-capacity, or backlog-draining.
+5. Separate prevention from recovery. Prevention reduces the chance of recurrence; recovery improves detection, containment, load shedding, rollback, capacity expansion, or queue draining.
+6. Keep the reflection useful to an SRE asking: "What should I pay attention to today, and what should we improve before the next outage?"
+7. Do not generalize from one episode.
+   - If supporting observations are from one service or one incident window, the statement must include "hypothesis" or "may indicate".
+   - Do not say "can trigger", "will cause", or "is a pattern" from single-service or single-episode evidence.
+8. Do not produce incident attribution. Avoid "likely deployment impact", "caused", "triggered", or similar wording unless multiple observations include direct causal confirmation.
+9. Prefer reflection types system_weakness, recovery_gap, detection_gap, attention_priority, procedural_learning, or inconclusive.
+10. Treat confidence as confidence in the reflected memory, not confidence in any single observation.
+11. Downgrade confidence when observations disagree, come from different providers, rely on moderate/limited evidence, or come from a single episode.
+12. Positive and negative claims both need evidence.
+13. Cite observation IDs for every important claim.
+14. State limitations and missing evidence.
+15. The statement should be one concise resilience lesson, not a timeline recap.
+16. Return only valid JSON matching the output schema.
+
+The response must include:
+- lesson: the durable operational lesson.
+- why_it_matters: why this lesson could prevent or reduce the next outage.
+- next_questions: questions an SRE should ask next.
+- prevention_actions: changes that reduce recurrence likelihood.
+- recovery_actions: changes that make recovery faster or less brittle.
+- confidence_limits: why this reflection may be wrong or incomplete.
 """
 
 
