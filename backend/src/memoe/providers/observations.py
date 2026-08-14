@@ -71,6 +71,7 @@ Evidence:
 
 def parse_json_content(content: str, provider_name: str) -> dict:
     """Parse a model response that should contain a single JSON object."""
+    content = strip_json_code_fence(content)
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as error:
@@ -81,6 +82,19 @@ def parse_json_content(content: str, provider_name: str) -> dict:
 
     validate_observation_payload(parsed, provider_name)
     return parsed
+
+
+def strip_json_code_fence(content: str) -> str:
+    """Return JSON content without an optional Markdown code fence."""
+    stripped = content.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    lines = stripped.splitlines()
+    if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+
+    return stripped
 
 
 def validate_observation_payload(payload: dict, provider_name: str) -> None:

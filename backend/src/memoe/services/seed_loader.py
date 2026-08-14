@@ -70,6 +70,50 @@ OBSERVATION_OUTPUT_SCHEMA = {
     },
 }
 
+REFLECTION_OUTPUT_SCHEMA = {
+    "type": "object",
+    "required": [
+        "statement",
+        "observation_type",
+        "confidence",
+        "evidence_quality",
+        "supporting_evidence_ids",
+        "rejected_evidence_ids",
+        "limitations",
+        "reasoning_summary",
+    ],
+    "properties": {
+        "statement": {"type": "string"},
+        "observation_type": {
+            "type": "string",
+            "enum": [
+                "cross_service_risk",
+                "recurring_pattern",
+                "evidence_quality_gap",
+                "procedural_learning",
+                "inconclusive",
+            ],
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence_quality": {
+            "type": "object",
+            "required": ["rating", "strengths", "gaps"],
+            "properties": {
+                "rating": {
+                    "type": "string",
+                    "enum": ["strong", "moderate", "limited", "insufficient"],
+                },
+                "strengths": {"type": "array", "items": {"type": "string"}},
+                "gaps": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+        "supporting_evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "rejected_evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "reasoning_summary": {"type": "string"},
+    },
+}
+
 OBSERVATION_PROCEDURE = """You are Memoe, an operational memory system.
 
 Your job is to generate evidence-backed observations for SREs.
@@ -103,6 +147,23 @@ Procedure:
    - Rate evidence quality below strong when ruling something out depends mainly on missing evidence or timestamp ordering.
 11. If evidence only shows timing relationships, describe the observation as a correlation or hypothesis, not a confirmed impact.
 12. Return only valid JSON matching the output schema.
+"""
+
+REFLECTION_PROCEDURE = """You are Memoe, an operational memory system.
+
+Your job is to turn stored operational observations into higher-level organizational memory.
+
+Reflection rules:
+1. Reflect over observations, not raw source events.
+2. Look for cross-service risk, recurring operational patterns, evidence quality gaps, and procedural learnings.
+3. Keep the reflection useful to an SRE asking: "What should I pay attention to today, and why?"
+4. Do not restate one observation unless it teaches a broader memory.
+5. Treat confidence as confidence in the reflected memory, not confidence in any single observation.
+6. Downgrade confidence when observations disagree, come from different providers, or rely on moderate/limited evidence.
+7. Positive and negative claims both need evidence.
+8. Cite observation IDs for every important claim.
+9. State limitations and missing evidence.
+10. Return only valid JSON matching the output schema.
 """
 
 
@@ -335,6 +396,39 @@ def upsert_observation_procedure(connection: Connection) -> str:
     return str(result[0])
 
 
+def upsert_reflection_procedure(connection: Connection) -> str:
+    """Insert or update the first reflection procedure and return its ID."""
+    result = connection.execute(
+        """
+        INSERT INTO procedures (
+          name,
+          version,
+          status,
+          purpose,
+          instructions,
+          output_schema
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (name, version)
+        DO UPDATE SET
+          status = excluded.status,
+          purpose = excluded.purpose,
+          instructions = excluded.instructions,
+          output_schema = excluded.output_schema
+        RETURNING id
+        """,
+        (
+            "operational_reflection_v1",
+            1,
+            "active",
+            "Generate higher-level operational memory from stored observations.",
+            REFLECTION_PROCEDURE,
+            Jsonb(REFLECTION_OUTPUT_SCHEMA),
+        ),
+    ).fetchone()
+    return str(result[0])
+
+
 def load_seed_scenario(scenario: str, settings: Settings | None = None) -> SeedResult:
     """Load a fixture scenario into CockroachDB."""
     fixture_rows = load_fixture_rows(scenario)
@@ -354,14 +448,17 @@ def load_seed_scenario(scenario: str, settings: Settings | None = None) -> SeedR
             event_source_ids.add(event_source_id)
             event_ids.add(event_id)
 
-        procedure_id = upsert_observation_procedure(connection)
+        procedure_ids = {
+            upsert_observation_procedure(connection),
+            upsert_reflection_procedure(connection),
+        }
 
     return SeedResult(
         scenario=scenario,
         services=len(service_ids),
         event_sources=len(event_source_ids),
         events=len(event_ids),
-        procedures=1 if procedure_id else 0,
+        procedures=len(procedure_ids),
     )
 
 

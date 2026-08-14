@@ -11,11 +11,13 @@ database_app = typer.Typer(help="Manage the local Memoe database.")
 seed_app = typer.Typer(help="Load synthetic evidence fixtures.")
 evidence_app = typer.Typer(help="Inspect normalized operational evidence.")
 observations_app = typer.Typer(help="Run and inspect observation generation.")
+reflections_app = typer.Typer(help="Run and inspect reflection generation.")
 
 app.add_typer(database_app, name="database")
 app.add_typer(seed_app, name="seed")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(observations_app, name="observations")
+app.add_typer(reflections_app, name="reflections")
 
 
 @app.command()
@@ -100,7 +102,7 @@ def observations_run(
     selected_provider = provider or settings.observation_provider
     try:
         result = run_observation(service, selected_provider, settings)
-    except ValueError as error:
+    except Exception as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=1) from error
 
@@ -188,6 +190,68 @@ def observations_list(
                     row.service_slug,
                     row.model_id,
                     row.observation_type,
+                    f"confidence={row.confidence}",
+                    f"quality={row.evidence_quality_rating}",
+                    row.statement,
+                ]
+            )
+        )
+
+
+@reflections_app.command("run")
+def reflections_run(
+    provider: Annotated[
+        str | None,
+        typer.Option(help="Reflection provider override, e.g. ollama or bedrock."),
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Maximum recent observations to reflect over.")] = 10,
+) -> None:
+    """Run reflection generation over stored observations."""
+    from memoe.services.reflection_runner import run_reflection
+
+    settings = Settings()
+    selected_provider = provider or settings.observation_provider
+    try:
+        result = run_reflection(selected_provider, limit=limit, settings=settings)
+    except Exception as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    typer.echo(f"Reflection run: {result.run_id}")
+    typer.echo(f"Reflection: {result.reflection_id}")
+    typer.echo(f"Confidence: {result.confidence}")
+    typer.echo(f"Statement: {result.statement}")
+    if result.evidence_quality:
+        typer.echo(f"Evidence quality: {result.evidence_quality}")
+    typer.echo(
+        f"Supporting observation IDs: {', '.join(result.supporting_observation_ids) or '-'}"
+    )
+    typer.echo(f"Rejected observation IDs: {', '.join(result.rejected_observation_ids) or '-'}")
+    if result.limitations:
+        typer.echo("Limitations:")
+        for limitation in result.limitations:
+            typer.echo(f"- {limitation}")
+
+
+@reflections_app.command("list")
+def reflections_list(
+    limit: Annotated[int, typer.Option(help="Maximum number of reflections to show.")] = 10,
+) -> None:
+    """List recent stored reflections."""
+    from memoe.services.reflection_runner import list_reflections
+
+    rows = list_reflections(limit=limit, settings=Settings())
+    if not rows:
+        typer.echo("No reflections found.")
+        return
+
+    for row in rows:
+        typer.echo(
+            " | ".join(
+                [
+                    row.created_at,
+                    row.model_id,
+                    row.reflection_type,
                     f"confidence={row.confidence}",
                     f"quality={row.evidence_quality_rating}",
                     row.statement,

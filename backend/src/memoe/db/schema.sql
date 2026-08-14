@@ -136,3 +136,59 @@ CREATE TABLE IF NOT EXISTS observation_evidence (
   UNIQUE (observation_run_id, event_id, role),
   CONSTRAINT observation_evidence_role_check CHECK (role IN ('considered', 'supporting', 'rejected'))
 );
+
+CREATE TABLE IF NOT EXISTS reflection_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  procedure_id UUID NOT NULL REFERENCES procedures(id),
+  procedure_name STRING NOT NULL,
+  procedure_version INT NOT NULL,
+  provider STRING NOT NULL,
+  model_id STRING NOT NULL,
+  status STRING NOT NULL,
+  request_payload JSONB NOT NULL,
+  raw_response JSONB NULL,
+  error_message STRING NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ NULL,
+  CONSTRAINT reflection_runs_status_check
+    CHECK (status IN ('pending', 'running', 'completed', 'failed'))
+);
+
+CREATE TABLE IF NOT EXISTS reflections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reflection_run_id UUID NOT NULL REFERENCES reflection_runs(id),
+  procedure_id UUID NOT NULL REFERENCES procedures(id),
+  statement STRING NOT NULL,
+  reflection_type STRING NOT NULL,
+  confidence DECIMAL NOT NULL,
+  evidence_quality JSONB NOT NULL DEFAULT '{}'::JSONB,
+  limitations JSONB NOT NULL DEFAULT '[]'::JSONB,
+  reasoning_summary STRING NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT reflections_confidence_check CHECK (confidence >= 0 AND confidence <= 1),
+  CONSTRAINT reflections_type_check CHECK (
+    reflection_type IN (
+      'cross_service_risk',
+      'recurring_pattern',
+      'evidence_quality_gap',
+      'procedural_learning',
+      'inconclusive'
+    )
+  )
+);
+
+CREATE INDEX IF NOT EXISTS reflections_created_at_idx
+  ON reflections (created_at);
+
+CREATE TABLE IF NOT EXISTS reflection_observations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reflection_run_id UUID NOT NULL REFERENCES reflection_runs(id),
+  reflection_id UUID NULL REFERENCES reflections(id),
+  observation_id UUID NOT NULL REFERENCES observations(id),
+  role STRING NOT NULL,
+  reason STRING NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (reflection_run_id, observation_id, role),
+  CONSTRAINT reflection_observations_role_check
+    CHECK (role IN ('considered', 'supporting', 'rejected'))
+);
