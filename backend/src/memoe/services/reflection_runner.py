@@ -49,6 +49,8 @@ class ReflectionSummary:
 def run_reflection(
     provider_name: str,
     limit: int = 10,
+    goal: str | None = None,
+    service_scope: str | None = None,
     settings: Settings | None = None,
 ) -> ReflectionRunResult:
     """Run reflection generation over recent observations."""
@@ -58,9 +60,21 @@ def run_reflection(
 
     with connect(resolved_settings) as connection:
         procedure = fetch_active_procedure(connection, "operational_reflection_v1")
-        observations = fetch_observation_bundle(connection, limit)
-        prior_reflections = fetch_prior_reflections(connection, limit=5)
-        validation_results = fetch_validation_result_bundle(connection, limit=10)
+        retrieval_results: list[dict[str, Any]] = []
+        if goal:
+            observations, prior_reflections, validation_results, retrieval_results = (
+                fetch_goal_scoped_memory(
+                    connection=connection,
+                    goal=goal,
+                    service_scope=service_scope,
+                    limit=limit,
+                    settings=resolved_settings,
+                )
+            )
+        else:
+            observations = fetch_observation_bundle(connection, limit)
+            prior_reflections = fetch_prior_reflections(connection, limit=5)
+            validation_results = fetch_validation_result_bundle(connection, limit=10)
 
         if not observations:
             raise ValueError("No observations found for reflection.")
@@ -70,6 +84,9 @@ def run_reflection(
             prior_reflections=prior_reflections,
             validation_results=validation_results,
             procedure=procedure,
+            goal=goal,
+            service_scope=service_scope,
+            retrieval_results=retrieval_results,
         )
         request_payload = {
             "procedure": {
@@ -96,7 +113,7 @@ def run_reflection(
 
     try:
         result = provider.generate_observation(request)
-        validate_observation_ids(result, observations)
+        validate_memory_ids(result, observations, prior_reflections, validation_results)
         validate_reflection_quality(result, observations)
         with connect(resolved_settings) as connection:
             reflection_id = persist_reflection_result(
@@ -210,6 +227,118 @@ def fetch_observation_bundle(connection, limit: int) -> list[dict[str, Any]]:
     ]
 
 
+def fetch_goal_scoped_memory(
+    connection,
+    goal: str,
+    service_scope: str | None,
+    limit: int,
+    settings: Settings,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Fetch memory selected by vector search plus hybrid scoring."""
+    from memoe.services.memory_embeddings import search_memory
+
+    search_results = search_memory(
+        goal=goal,
+        service_scope=service_scope,
+        limit=limit,
+        settings=settings,
+    )
+    observation_ids = [
+        row.memory_id for row in search_results if row.memory_type == "observation"
+    ]
+    reflection_ids = [
+        row.memory_id for row in search_results if row.memory_type == "reflection"
+    ]
+    validation_result_ids = [
+        row.memory_id for row in search_results if row.memory_type == "validation_result"
+    ]
+
+    observations = fetch_observations_by_ids(connection, observation_ids)
+    if not observations:
+        observations = fetch_observation_bundle(connection, min(limit, 5))
+
+    return (
+        observations,
+        fetch_reflections_by_ids(connection, reflection_ids),
+        fetch_validation_results_by_ids(connection, validation_result_ids),
+        [
+            {
+                "memory_type": row.memory_type,
+                "memory_id": row.memory_id,
+                "hybrid_score": row.hybrid_score,
+                "vector_similarity": row.vector_similarity,
+                "service_slug": row.service_slug,
+                "lifecycle_status": row.lifecycle_status,
+                "evidence_quality_rating": row.evidence_quality_rating,
+            }
+            for row in search_results
+        ],
+    )
+
+
+def fetch_observations_by_ids(connection, observation_ids: list[str]) -> list[dict[str, Any]]:
+    """Fetch observations by ID in newest-first order."""
+    if not observation_ids:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(observation_ids))
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+              o.id,
+              s.slug AS service_slug,
+              o.statement,
+              o.observation_type,
+              o.confidence,
+              o.evidence_quality,
+              o.lifecycle_status,
+              o.valid_from,
+              o.valid_until,
+              o.stale_after,
+              o.last_checked_at,
+              o.limitations,
+              o.reasoning_summary,
+              o.created_at,
+              r.provider,
+              r.model_id,
+              r.procedure_name,
+              r.procedure_version
+            FROM observations o
+            JOIN services s ON s.id = o.service_id
+            JOIN observation_runs r ON r.id = o.observation_run_id
+            WHERE o.id IN ({placeholders})
+            ORDER BY o.created_at DESC
+            """,
+            observation_ids,
+        )
+        rows = cursor.fetchall()
+
+    return [
+        {
+            "id": str(row["id"]),
+            "service_slug": row["service_slug"],
+            "statement": row["statement"],
+            "observation_type": row["observation_type"],
+            "confidence": float(row["confidence"]),
+            "evidence_quality": row["evidence_quality"],
+            "lifecycle_status": row["lifecycle_status"],
+            "valid_from": row["valid_from"].isoformat(),
+            "valid_until": row["valid_until"].isoformat() if row["valid_until"] else None,
+            "stale_after": row["stale_after"].isoformat() if row["stale_after"] else None,
+            "last_checked_at": row["last_checked_at"].isoformat() if row["last_checked_at"] else None,
+            "limitations": row["limitations"],
+            "reasoning_summary": row["reasoning_summary"],
+            "created_at": row["created_at"].isoformat(),
+            "provider": row["provider"],
+            "model_id": row["model_id"],
+            "procedure_name": row["procedure_name"],
+            "procedure_version": row["procedure_version"],
+        }
+        for row in rows
+    ]
+
+
 def fetch_prior_reflections(connection, limit: int) -> list[dict[str, Any]]:
     """Fetch recent prior reflections as memory context."""
     with connection.cursor(row_factory=dict_row) as cursor:
@@ -235,6 +364,58 @@ def fetch_prior_reflections(connection, limit: int) -> list[dict[str, Any]]:
             LIMIT %s
             """,
             (limit,),
+        )
+        rows = cursor.fetchall()
+
+    return [
+        {
+            "id": str(row["id"]),
+            "statement": row["statement"],
+            "reflection_type": row["reflection_type"],
+            "confidence": float(row["confidence"]),
+            "evidence_quality": row["evidence_quality"],
+            "details": row["details"],
+            "limitations": row["limitations"],
+            "reasoning_summary": row["reasoning_summary"],
+            "created_at": row["created_at"].isoformat(),
+            "provider": row["provider"],
+            "model_id": row["model_id"],
+            "procedure_name": row["procedure_name"],
+            "procedure_version": row["procedure_version"],
+        }
+        for row in rows
+    ]
+
+
+def fetch_reflections_by_ids(connection, reflection_ids: list[str]) -> list[dict[str, Any]]:
+    """Fetch prior reflections by ID."""
+    if not reflection_ids:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(reflection_ids))
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+              f.id,
+              f.statement,
+              f.reflection_type,
+              f.confidence,
+              f.evidence_quality,
+              f.details,
+              f.limitations,
+              f.reasoning_summary,
+              f.created_at,
+              r.provider,
+              r.model_id,
+              r.procedure_name,
+              r.procedure_version
+            FROM reflections f
+            JOIN reflection_runs r ON r.id = f.reflection_run_id
+            WHERE f.id IN ({placeholders})
+            ORDER BY f.created_at DESC
+            """,
+            reflection_ids,
         )
         rows = cursor.fetchall()
 
@@ -295,11 +476,55 @@ def fetch_validation_result_bundle(connection, limit: int) -> list[dict[str, Any
     ]
 
 
+def fetch_validation_results_by_ids(connection, validation_result_ids: list[str]) -> list[dict[str, Any]]:
+    """Fetch validation results by ID."""
+    if not validation_result_ids:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(validation_result_ids))
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+              id,
+              observation_id,
+              reflection_id,
+              source,
+              result_type,
+              summary,
+              evidence,
+              created_at
+            FROM validation_results
+            WHERE id IN ({placeholders})
+            ORDER BY created_at DESC
+            """,
+            validation_result_ids,
+        )
+        rows = cursor.fetchall()
+
+    return [
+        {
+            "id": str(row["id"]),
+            "observation_id": str(row["observation_id"]) if row["observation_id"] else None,
+            "reflection_id": str(row["reflection_id"]) if row["reflection_id"] else None,
+            "source": row["source"],
+            "result_type": row["result_type"],
+            "summary": row["summary"],
+            "evidence": row["evidence"],
+            "created_at": row["created_at"].isoformat(),
+        }
+        for row in rows
+    ]
+
+
 def build_memory_bundle(
     observations: list[dict[str, Any]],
     prior_reflections: list[dict[str, Any]],
     validation_results: list[dict[str, Any]],
     procedure: dict[str, Any],
+    goal: str | None = None,
+    service_scope: str | None = None,
+    retrieval_results: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build the cross-memory input sent to the reflection provider."""
     return [
@@ -309,6 +534,13 @@ def build_memory_bundle(
             "name": procedure["name"],
             "version": procedure["version"],
             "purpose": "Current procedural memory guiding reflection.",
+            "goal": goal,
+            "service_scope": service_scope,
+        },
+        {
+            "id": "memory:retrieval_results",
+            "memory_type": "retrieval_result_set",
+            "items": retrieval_results or [],
         },
         {
             "id": "memory:latest_observations",
@@ -362,13 +594,22 @@ def create_reflection_run(
     return str(row[0])
 
 
-def validate_observation_ids(result: ObservationResult, observations: list[dict[str, Any]]) -> None:
-    """Ensure model-returned observation IDs exist in the request bundle."""
-    known_ids = {row["id"] for row in observations}
+def validate_memory_ids(
+    result: ObservationResult,
+    observations: list[dict[str, Any]],
+    prior_reflections: list[dict[str, Any]],
+    validation_results: list[dict[str, Any]],
+) -> None:
+    """Ensure model-returned memory IDs exist in the request bundle."""
+    known_ids = (
+        {row["id"] for row in observations}
+        | {row["id"] for row in prior_reflections}
+        | {row["id"] for row in validation_results}
+    )
     returned_ids = set(result.supporting_evidence_ids) | set(result.rejected_evidence_ids)
     unknown_ids = sorted(returned_ids - known_ids)
     if unknown_ids:
-        raise ValueError(f"Model returned unknown observation IDs: {', '.join(unknown_ids)}")
+        raise ValueError(f"Model returned unknown memory IDs: {', '.join(unknown_ids)}")
 
 
 def validate_reflection_quality(result: ObservationResult, observations: list[dict[str, Any]]) -> None:

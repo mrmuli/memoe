@@ -13,6 +13,7 @@ evidence_app = typer.Typer(help="Inspect normalized operational evidence.")
 observations_app = typer.Typer(help="Run and inspect observation generation.")
 reflections_app = typer.Typer(help="Run and inspect reflection generation.")
 validations_app = typer.Typer(help="Record and inspect validation results.")
+memory_app = typer.Typer(help="Embed and search stored memory.")
 
 app.add_typer(database_app, name="database")
 app.add_typer(seed_app, name="seed")
@@ -20,6 +21,7 @@ app.add_typer(evidence_app, name="evidence")
 app.add_typer(observations_app, name="observations")
 app.add_typer(reflections_app, name="reflections")
 app.add_typer(validations_app, name="validations")
+app.add_typer(memory_app, name="memory")
 
 
 @app.command()
@@ -210,6 +212,14 @@ def reflections_run(
         typer.Option(help="Reflection provider override, e.g. ollama or bedrock."),
     ] = None,
     limit: Annotated[int, typer.Option(help="Maximum recent observations to reflect over.")] = 10,
+    goal: Annotated[
+        str | None,
+        typer.Option(help="Optional retrieval goal for scoped reflection memory."),
+    ] = None,
+    service: Annotated[
+        str | None,
+        typer.Option(help="Optional service scope for retrieval, e.g. payments."),
+    ] = None,
 ) -> None:
     """Run reflection generation over stored observations."""
     from memoe.services.reflection_runner import run_reflection
@@ -217,7 +227,13 @@ def reflections_run(
     settings = Settings()
     selected_provider = provider or settings.observation_provider
     try:
-        result = run_reflection(selected_provider, limit=limit, settings=settings)
+        result = run_reflection(
+            selected_provider,
+            limit=limit,
+            goal=goal,
+            service_scope=service,
+            settings=settings,
+        )
     except Exception as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=1) from error
@@ -346,4 +362,43 @@ def validations_list(
         typer.echo(
             f"{row.created_at} | {row.source} | {row.result_type} | "
             f"{row.target_type} | {row.target_id} | {row.summary}"
+        )
+
+
+@memory_app.command("refresh-embeddings")
+def memory_refresh_embeddings() -> None:
+    """Refresh vector embeddings for stored memory."""
+    from memoe.services.memory_embeddings import refresh_memory_embeddings
+
+    result = refresh_memory_embeddings(Settings())
+    typer.echo(f"Embedded memory rows: {result.embedded}")
+    typer.echo(f"Observations: {result.observations}")
+    typer.echo(f"Reflections: {result.reflections}")
+    typer.echo(f"Validation results: {result.validation_results}")
+
+
+@memory_app.command("search")
+def memory_search(
+    goal: Annotated[str, typer.Option(help="Search goal or question.")],
+    service: Annotated[
+        str | None,
+        typer.Option(help="Optional service scope, e.g. payments."),
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Maximum memory results to show.")] = 10,
+) -> None:
+    """Search memory with CockroachDB vector similarity and hybrid scoring."""
+    from memoe.services.memory_embeddings import search_memory
+
+    rows = search_memory(goal=goal, service_scope=service, limit=limit, settings=Settings())
+    if not rows:
+        typer.echo("No memory embeddings found. Run `memoe memory refresh-embeddings` first.")
+        return
+
+    for row in rows:
+        preview = row.text.replace("\n", " ")[:180]
+        typer.echo(
+            f"{row.hybrid_score} | vector={row.vector_similarity} | {row.memory_type} | "
+            f"{row.memory_id} | service={row.service_slug or '-'} | "
+            f"lifecycle={row.lifecycle_status or '-'} | quality={row.evidence_quality_rating or '-'} | "
+            f"{preview}"
         )

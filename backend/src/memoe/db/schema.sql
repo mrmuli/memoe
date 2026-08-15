@@ -267,3 +267,22 @@ CREATE INDEX IF NOT EXISTS validation_results_observation_created_at_idx
 
 CREATE INDEX IF NOT EXISTS validation_results_reflection_created_at_idx
   ON validation_results (reflection_id, created_at);
+
+CREATE TABLE IF NOT EXISTS memory_embeddings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  memory_type STRING NOT NULL,
+  memory_id UUID NOT NULL,
+  embedding_model STRING NOT NULL,
+  embedding VECTOR(64) NOT NULL,
+  embedded_text STRING NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (memory_type, memory_id, embedding_model),
+  CONSTRAINT memory_embeddings_type_check CHECK (
+    memory_type IN ('observation', 'reflection', 'validation_result')
+  )
+);
+
+CREATE INDEX IF NOT EXISTS memory_embeddings_type_model_idx
+  ON memory_embeddings (memory_type, embedding_model);
