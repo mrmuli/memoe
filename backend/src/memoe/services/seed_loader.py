@@ -41,6 +41,7 @@ OBSERVATION_OUTPUT_SCHEMA = {
         "prevention_actions",
         "recovery_actions",
         "confidence_limits",
+        "memory_operations",
     ],
     "properties": {
         "statement": {"type": "string"},
@@ -133,6 +134,30 @@ REFLECTION_OUTPUT_SCHEMA = {
         "prevention_actions": {"type": "array", "items": {"type": "string"}},
         "recovery_actions": {"type": "array", "items": {"type": "string"}},
         "confidence_limits": {"type": "array", "items": {"type": "string"}},
+        "memory_operations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["operation", "target_type", "target_id", "reason"],
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": [
+                            "mark_observation_stale",
+                            "mark_observation_needs_recheck",
+                            "mark_observation_validated",
+                            "mark_reflection_weakened",
+                            "request_validation",
+                            "recommend_procedure_update",
+                            "none",
+                        ],
+                    },
+                    "target_type": {"type": "string"},
+                    "target_id": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+            },
+        },
     },
 }
 
@@ -176,7 +201,11 @@ REFLECTION_PROCEDURE = """You are Memoe, an operational memory system.
 Your job is to turn stored operational observations into higher-level resilience learning.
 
 Reflection rules:
-1. Reflect over observations, not raw source events.
+1. Reflect over the cross-memory bundle, not raw source events.
+   - latest_observations are the primary citable evidence.
+   - prior_reflections are previous memory that may now be stale, reinforced, or weakened.
+   - validation_results are later evidence from tools or humans.
+   - procedural memory tells you how to reason, but is not evidence of system behavior.
 2. Do not produce polished summaries. Produce lessons that can change future engineering, operations, or investigation behavior.
 3. Look for system weaknesses: saturation, reduced margin, queue/backlog growth, retry amplification, dependency pressure, cascading effects, brittle collapse, detection gaps, and recovery difficulty.
 4. Ask what operating mode the service was in: normal, deploying, overloaded, recovering, dependency-degraded, partial-capacity, or backlog-draining.
@@ -191,9 +220,11 @@ Reflection rules:
 11. Downgrade confidence when observations disagree, come from different providers, rely on moderate/limited evidence, or come from a single episode.
 12. Positive and negative claims both need evidence.
 13. Cite observation IDs for every important claim.
-14. State limitations and missing evidence.
-15. The statement should be one concise resilience lesson, not a timeline recap.
-16. Return only valid JSON matching the output schema.
+14. If later validation results weaken or supersede an observation, do not repeat that observation as current truth.
+15. Recommend memory_operations when a memory should be rechecked, marked stale, validated, weakened, or when validation is needed.
+16. State limitations and missing evidence.
+17. The statement should be one concise resilience lesson, not a timeline recap.
+18. Return only valid JSON matching the output schema.
 
 The response must include:
 - lesson: the durable operational lesson.
@@ -202,6 +233,7 @@ The response must include:
 - prevention_actions: changes that reduce recurrence likelihood.
 - recovery_actions: changes that make recovery faster or less brittle.
 - confidence_limits: why this reflection may be wrong or incomplete.
+- memory_operations: recommended memory lifecycle changes; use "none" if no change is recommended.
 """
 
 

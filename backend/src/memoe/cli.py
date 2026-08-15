@@ -12,12 +12,14 @@ seed_app = typer.Typer(help="Load synthetic evidence fixtures.")
 evidence_app = typer.Typer(help="Inspect normalized operational evidence.")
 observations_app = typer.Typer(help="Run and inspect observation generation.")
 reflections_app = typer.Typer(help="Run and inspect reflection generation.")
+validations_app = typer.Typer(help="Record and inspect validation results.")
 
 app.add_typer(database_app, name="database")
 app.add_typer(seed_app, name="seed")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(observations_app, name="observations")
 app.add_typer(reflections_app, name="reflections")
+app.add_typer(validations_app, name="validations")
 
 
 @app.command()
@@ -139,6 +141,7 @@ def observations_show(
     typer.echo(f"Service: {observation.service_slug}")
     typer.echo(f"Type: {observation.observation_type}")
     typer.echo(f"Confidence: {observation.confidence}")
+    typer.echo(f"Lifecycle: {observation.lifecycle_status}")
     typer.echo(f"Model: {observation.model_id}")
     typer.echo(f"Procedure: {observation.procedure_name} v{observation.procedure_version}")
     typer.echo(f"Statement: {observation.statement}")
@@ -186,12 +189,14 @@ def observations_list(
         typer.echo(
             " | ".join(
                 [
+                    row.id,
                     row.created_at,
                     row.service_slug,
                     row.model_id,
                     row.observation_type,
                     f"confidence={row.confidence}",
                     f"quality={row.evidence_quality_rating}",
+                    f"lifecycle={row.lifecycle_status}",
                     row.statement,
                 ]
             )
@@ -231,6 +236,7 @@ def reflections_run(
             "prevention_actions",
             "recovery_actions",
             "confidence_limits",
+            "memory_operations",
         ):
             if key in result.details:
                 typer.echo(f"{key}: {result.details[key]}")
@@ -260,6 +266,7 @@ def reflections_list(
         typer.echo(
             " | ".join(
                 [
+                    row.id,
                     row.created_at,
                     row.model_id,
                     row.reflection_type,
@@ -268,4 +275,75 @@ def reflections_list(
                     row.statement,
                 ]
             )
+        )
+
+
+@validations_app.command("add")
+def validations_add(
+    observation: Annotated[
+        str | None,
+        typer.Option(help="Observation ID being validated."),
+    ] = None,
+    reflection: Annotated[
+        str | None,
+        typer.Option(help="Reflection ID being validated."),
+    ] = None,
+    result_type: Annotated[
+        str,
+        typer.Option(help="validated, weakened, superseded, needs_recheck, or inconclusive."),
+    ] = "needs_recheck",
+    summary: Annotated[str, typer.Option(help="Validation result summary.")] = "",
+    source: Annotated[str, typer.Option(help="Validation source, e.g. manual or github_mcp.")] = "manual",
+) -> None:
+    """Record a validation result."""
+    from memoe.services.validation_service import add_validation_result
+
+    try:
+        result = add_validation_result(
+            source=source,
+            result_type=result_type,
+            summary=summary,
+            observation_id=observation,
+            reflection_id=reflection,
+            settings=Settings(),
+        )
+    except ValueError as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    typer.echo(f"Validation run: {result.run_id}")
+    typer.echo(f"Validation result: {result.result_id}")
+    typer.echo(f"Target: {result.target_type} {result.target_id}")
+    typer.echo(f"Result type: {result.result_type}")
+
+
+@validations_app.command("list")
+def validations_list(
+    observation: Annotated[
+        str | None,
+        typer.Option(help="Optional observation ID filter."),
+    ] = None,
+    reflection: Annotated[
+        str | None,
+        typer.Option(help="Optional reflection ID filter."),
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Maximum number of validation results to show.")] = 10,
+) -> None:
+    """List validation results."""
+    from memoe.services.validation_service import list_validation_results
+
+    rows = list_validation_results(
+        observation_id=observation,
+        reflection_id=reflection,
+        limit=limit,
+        settings=Settings(),
+    )
+    if not rows:
+        typer.echo("No validation results found.")
+        return
+
+    for row in rows:
+        typer.echo(
+            f"{row.created_at} | {row.source} | {row.result_type} | "
+            f"{row.target_type} | {row.target_id} | {row.summary}"
         )

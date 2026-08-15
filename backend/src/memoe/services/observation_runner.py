@@ -39,6 +39,7 @@ class StoredObservation:
     observation_type: str
     confidence: float
     evidence_quality: dict[str, Any]
+    lifecycle_status: str
     limitations: list[str]
     reasoning_summary: str
     model_id: str
@@ -58,6 +59,7 @@ class ObservationSummary:
     observation_type: str
     confidence: float
     evidence_quality_rating: str
+    lifecycle_status: str
     statement: str
 
 
@@ -289,10 +291,11 @@ def persist_observation_result(
           observation_type,
           confidence,
           evidence_quality,
+          details,
           limitations,
           reasoning_summary
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
         """,
         (
@@ -303,6 +306,7 @@ def persist_observation_result(
             result.observation_type,
             result.confidence,
             Jsonb(result.evidence_quality),
+            Jsonb(result.extra_fields),
             Jsonb(result.limitations),
             result.reasoning_summary,
         ),
@@ -373,6 +377,7 @@ def latest_observation(settings: Settings | None = None) -> StoredObservation | 
               o.observation_type,
               o.confidence,
               o.evidence_quality,
+              o.lifecycle_status,
               o.limitations,
               o.reasoning_summary,
               r.model_id,
@@ -416,6 +421,7 @@ def latest_observation(settings: Settings | None = None) -> StoredObservation | 
         observation_type=str(observation["observation_type"]),
         confidence=float(observation["confidence"]),
         evidence_quality=dict(observation["evidence_quality"]),
+        lifecycle_status=str(observation["lifecycle_status"]),
         limitations=list(observation["limitations"]),
         reasoning_summary=str(observation["reasoning_summary"]),
         model_id=str(observation["model_id"]),
@@ -448,6 +454,7 @@ def list_observations(
           o.observation_type,
           o.confidence,
           COALESCE(o.evidence_quality->>'rating', 'unknown') AS evidence_quality_rating,
+          o.lifecycle_status,
           o.statement
         FROM observations o
         JOIN services s ON s.id = o.service_id
@@ -474,6 +481,7 @@ def list_observations(
             observation_type=str(row["observation_type"]),
             confidence=float(row["confidence"]),
             evidence_quality_rating=str(row["evidence_quality_rating"]),
+            lifecycle_status=str(row["lifecycle_status"]),
             statement=str(row["statement"]),
         )
         for row in rows

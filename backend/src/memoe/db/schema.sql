@@ -106,8 +106,24 @@ CREATE TABLE IF NOT EXISTS observations (
   details JSONB NOT NULL DEFAULT '{}'::JSONB,
   limitations JSONB NOT NULL DEFAULT '[]'::JSONB,
   reasoning_summary STRING NOT NULL,
+  lifecycle_status STRING NOT NULL DEFAULT 'fresh',
+  valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+  valid_until TIMESTAMPTZ NULL,
+  stale_after TIMESTAMPTZ NULL,
+  last_checked_at TIMESTAMPTZ NULL,
+  superseded_by_observation_id UUID NULL REFERENCES observations(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT observations_confidence_check CHECK (confidence >= 0 AND confidence <= 1),
+  CONSTRAINT observations_lifecycle_status_check CHECK (
+    lifecycle_status IN (
+      'fresh',
+      'stale',
+      'superseded',
+      'validated',
+      'weakened',
+      'needs_recheck'
+    )
+  ),
   CONSTRAINT observations_type_check CHECK (
     observation_type IN (
       'deployment_impact',
@@ -125,6 +141,33 @@ CREATE INDEX IF NOT EXISTS observations_service_created_at_idx
   ON observations (service_id, created_at);
 
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS evidence_quality JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS lifecycle_status STRING NOT NULL DEFAULT 'fresh';
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ NULL;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS stale_after TIMESTAMPTZ NULL;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ NULL;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS superseded_by_observation_id UUID NULL REFERENCES observations(id);
+
+ALTER TABLE observations DROP CONSTRAINT IF EXISTS observations_lifecycle_status_check;
+
+ALTER TABLE observations ADD CONSTRAINT observations_lifecycle_status_check CHECK (
+  lifecycle_status IN (
+    'fresh',
+    'stale',
+    'superseded',
+    'validated',
+    'weakened',
+    'needs_recheck'
+  )
+);
 
 CREATE TABLE IF NOT EXISTS observation_evidence (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -188,3 +231,39 @@ CREATE TABLE IF NOT EXISTS reflection_observations (
   CONSTRAINT reflection_observations_role_check
     CHECK (role IN ('considered', 'supporting', 'rejected'))
 );
+
+CREATE TABLE IF NOT EXISTS validation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source STRING NOT NULL,
+  status STRING NOT NULL,
+  query JSONB NOT NULL DEFAULT '{}'::JSONB,
+  raw_response JSONB NULL,
+  error_message STRING NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ NULL,
+  CONSTRAINT validation_runs_status_check CHECK (status IN ('pending', 'running', 'completed', 'failed'))
+);
+
+CREATE TABLE IF NOT EXISTS validation_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  validation_run_id UUID NOT NULL REFERENCES validation_runs(id),
+  observation_id UUID NULL REFERENCES observations(id),
+  reflection_id UUID NULL REFERENCES reflections(id),
+  source STRING NOT NULL,
+  result_type STRING NOT NULL,
+  summary STRING NOT NULL,
+  evidence JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT validation_results_target_check CHECK (
+    observation_id IS NOT NULL OR reflection_id IS NOT NULL
+  ),
+  CONSTRAINT validation_results_type_check CHECK (
+    result_type IN ('validated', 'weakened', 'superseded', 'needs_recheck', 'inconclusive')
+  )
+);
+
+CREATE INDEX IF NOT EXISTS validation_results_observation_created_at_idx
+  ON validation_results (observation_id, created_at);
+
+CREATE INDEX IF NOT EXISTS validation_results_reflection_created_at_idx
+  ON validation_results (reflection_id, created_at);
