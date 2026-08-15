@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import boto3
+import httpx
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -17,6 +18,8 @@ from memoe.db.connection import connect
 
 EMBEDDING_DIMENSIONS = 256
 EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
+BGE_EMBEDDING_DIMENSIONS = 384
+BGE_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_\-:.]*")
 
 
@@ -165,14 +168,15 @@ def upsert_memory_embedding(
           memory_type,
           memory_id,
           embedding_model,
-          embedding,
+          {vector_column(dimensions)},
           embedded_text,
           metadata
         )
         VALUES (%s, %s, %s, %s::VECTOR({dimensions}), %s, %s)
         ON CONFLICT (memory_type, memory_id, embedding_model)
         DO UPDATE SET
-          embedding = excluded.embedding,
+          embedding = {excluded_vector_value("embedding", dimensions)},
+          embedding_384 = {excluded_vector_value("embedding_384", dimensions)},
           embedded_text = excluded.embedded_text,
           metadata = excluded.metadata,
           updated_at = now()
@@ -198,7 +202,7 @@ def search_memory(
     resolved_settings = settings or Settings()
     dimensions = embedding_dimensions(resolved_settings)
     model_id = embedding_model_id(resolved_settings)
-    query_embedding = vector_literal(embed_text(goal, resolved_settings))
+    query_embedding = vector_literal(embed_query(goal, resolved_settings))
     candidate_limit = max(limit * 4, 20)
 
     with connect(resolved_settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
@@ -209,10 +213,11 @@ def search_memory(
               memory_id,
               embedded_text,
               metadata,
-              1 - (embedding <=> %s::VECTOR({dimensions})) AS vector_similarity
+              1 - ({vector_column(dimensions)} <=> %s::VECTOR({dimensions})) AS vector_similarity
             FROM memory_embeddings
             WHERE embedding_model = %s
-            ORDER BY embedding <=> %s::VECTOR({dimensions})
+              AND {vector_column(dimensions)} IS NOT NULL
+            ORDER BY {vector_column(dimensions)} <=> %s::VECTOR({dimensions})
             LIMIT %s
             """,
             (query_embedding, model_id, query_embedding, candidate_limit),
@@ -262,6 +267,28 @@ def score_memory_row(
 
 
 def embed_text(text: str, settings: Settings) -> list[float]:
+    """Generate an embedding with the configured provider."""
+    provider = settings.embedding_provider.lower()
+    if provider == "bedrock":
+        return embed_text_with_bedrock(text, settings)
+    if provider == "tei":
+        return embed_text_with_tei(text, settings, input_type="passage")
+
+    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+
+
+def embed_query(text: str, settings: Settings) -> list[float]:
+    """Generate a query embedding with the configured provider."""
+    provider = settings.embedding_provider.lower()
+    if provider == "bedrock":
+        return embed_text_with_bedrock(text, settings)
+    if provider == "tei":
+        return embed_text_with_tei(text, settings, input_type="query")
+
+    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+
+
+def embed_text_with_bedrock(text: str, settings: Settings) -> list[float]:
     """Generate a Titan text embedding with Bedrock."""
     body = {
         "inputText": text,
@@ -282,6 +309,29 @@ def embed_text(text: str, settings: Settings) -> list[float]:
     return [float(value) for value in embedding]
 
 
+def embed_text_with_tei(text: str, settings: Settings, input_type: str) -> list[float]:
+    """Generate a BGE embedding through Hugging Face TEI."""
+    input_text = text
+    if input_type == "query" and settings.tei_query_instruction:
+        input_text = settings.tei_query_instruction + text
+
+    response = httpx.post(
+        f"{settings.tei_base_url.rstrip('/')}/embed",
+        json={"inputs": input_text},
+        timeout=30,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise TypeError("TEI embedding response must be a list.")
+
+    embedding = payload[0] if payload and isinstance(payload[0], list) else payload
+    if not isinstance(embedding, list):
+        raise TypeError("TEI embedding response did not include an embedding list.")
+
+    return [float(value) for value in embedding]
+
+
 def bedrock_runtime_client(settings: Settings):
     """Create a Bedrock Runtime client from the local AWS environment."""
     if not settings.aws_region:
@@ -297,15 +347,45 @@ def bedrock_runtime_client(settings: Settings):
 
 def embedding_model_id(settings: Settings) -> str:
     """Return the configured embedding model ID."""
-    return settings.bedrock_embedding_model_id or EMBEDDING_MODEL
+    provider = settings.embedding_provider.lower()
+    if provider == "bedrock":
+        return settings.bedrock_embedding_model_id or EMBEDDING_MODEL
+    if provider == "tei":
+        return settings.tei_model_id or BGE_EMBEDDING_MODEL
+
+    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
 
 
 def embedding_dimensions(settings: Settings) -> int:
     """Return and validate the configured embedding dimensions."""
-    dimensions = int(settings.bedrock_embedding_dimensions)
-    if dimensions != EMBEDDING_DIMENSIONS:
-        raise ValueError(f"Memoe currently stores embeddings in VECTOR({EMBEDDING_DIMENSIONS}).")
+    provider = settings.embedding_provider.lower()
+    if provider == "bedrock":
+        dimensions = int(settings.bedrock_embedding_dimensions)
+    elif provider == "tei":
+        dimensions = int(settings.tei_embedding_dimensions)
+    else:
+        raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+
+    if dimensions not in {EMBEDDING_DIMENSIONS, BGE_EMBEDDING_DIMENSIONS}:
+        raise ValueError("Memoe currently stores embeddings in VECTOR(256) or VECTOR(384).")
     return dimensions
+
+
+def vector_column(dimensions: int) -> str:
+    """Return the vector column used by the configured dimensions."""
+    if dimensions == EMBEDDING_DIMENSIONS:
+        return "embedding"
+    if dimensions == BGE_EMBEDDING_DIMENSIONS:
+        return "embedding_384"
+
+    raise ValueError("Unsupported embedding dimensions.")
+
+
+def excluded_vector_value(column_name: str, dimensions: int) -> str:
+    """Return the ON CONFLICT update value for a vector column."""
+    if column_name == vector_column(dimensions):
+        return f"excluded.{column_name}"
+    return "NULL"
 
 
 def reset_memory_embedding_index(settings: Settings | None = None) -> None:

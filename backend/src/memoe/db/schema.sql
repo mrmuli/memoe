@@ -273,12 +273,17 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
   memory_type STRING NOT NULL,
   memory_id UUID NOT NULL,
   embedding_model STRING NOT NULL,
-  embedding VECTOR(256) NOT NULL,
+  embedding VECTOR(256) NULL,
+  embedding_384 VECTOR(384) NULL,
   embedded_text STRING NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (memory_type, memory_id, embedding_model),
+  CONSTRAINT memory_embeddings_one_vector_check CHECK (
+    (embedding IS NOT NULL AND embedding_384 IS NULL)
+    OR (embedding IS NULL AND embedding_384 IS NOT NULL)
+  ),
   CONSTRAINT memory_embeddings_type_check CHECK (
     memory_type IN ('observation', 'reflection', 'validation_result')
   )

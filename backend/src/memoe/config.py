@@ -34,3 +34,9 @@ class Settings(BaseSettings):
     bedrock_embedding_model_id: str = "amazon.titan-embed-text-v2:0"
     bedrock_embedding_dimensions: int = 256
     bedrock_embedding_normalize: bool = True
+
+    embedding_provider: str = "bedrock"
+    tei_base_url: str = "http://localhost:8081"
+    tei_model_id: str = "BAAI/bge-small-en-v1.5"
+    tei_embedding_dimensions: int = 384
+    tei_query_instruction: str = "Represent this sentence for searching relevant passages: "

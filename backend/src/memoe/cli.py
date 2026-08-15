@@ -39,6 +39,10 @@ def config() -> None:
     typer.echo(f"BEDROCK_EMBEDDING_MODEL_ID={settings.bedrock_embedding_model_id}")
     typer.echo(f"BEDROCK_EMBEDDING_DIMENSIONS={settings.bedrock_embedding_dimensions}")
     typer.echo(f"BEDROCK_EMBEDDING_NORMALIZE={settings.bedrock_embedding_normalize}")
+    typer.echo(f"EMBEDDING_PROVIDER={settings.embedding_provider}")
+    typer.echo(f"TEI_BASE_URL={settings.tei_base_url}")
+    typer.echo(f"TEI_MODEL_ID={settings.tei_model_id}")
+    typer.echo(f"TEI_EMBEDDING_DIMENSIONS={settings.tei_embedding_dimensions}")
 
 
 @database_app.command("init")
