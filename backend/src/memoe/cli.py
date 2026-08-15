@@ -36,6 +36,9 @@ def config() -> None:
     typer.echo(f"AWS_REGION={settings.aws_region or ''}")
     typer.echo(f"AWS_PROFILE={settings.aws_profile or ''}")
     typer.echo(f"BEDROCK_MODEL_ID={settings.bedrock_model_id or ''}")
+    typer.echo(f"BEDROCK_EMBEDDING_MODEL_ID={settings.bedrock_embedding_model_id}")
+    typer.echo(f"BEDROCK_EMBEDDING_DIMENSIONS={settings.bedrock_embedding_dimensions}")
+    typer.echo(f"BEDROCK_EMBEDDING_NORMALIZE={settings.bedrock_embedding_normalize}")
 
 
 @database_app.command("init")
@@ -375,6 +378,18 @@ def memory_refresh_embeddings() -> None:
     typer.echo(f"Observations: {result.observations}")
     typer.echo(f"Reflections: {result.reflections}")
     typer.echo(f"Validation results: {result.validation_results}")
+
+
+@memory_app.command("reset-index")
+def memory_reset_index() -> None:
+    """Drop and recreate the derived memory embedding index."""
+    from memoe.db.init import initialize_database
+    from memoe.services.memory_embeddings import reset_memory_embedding_index
+
+    settings = Settings()
+    reset_memory_embedding_index(settings)
+    initialize_database(settings)
+    typer.echo("Memory embedding index reset.")
 
 
 @memory_app.command("search")

@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
   memory_type STRING NOT NULL,
   memory_id UUID NOT NULL,
   embedding_model STRING NOT NULL,
-  embedding VECTOR(64) NOT NULL,
+  embedding VECTOR(256) NOT NULL,
   embedded_text STRING NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

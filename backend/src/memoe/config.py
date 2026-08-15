@@ -30,3 +30,7 @@ class Settings(BaseSettings):
     bedrock_model_id: str | None = None
     bedrock_max_tokens: int = 4096
     bedrock_temperature: float = 0
+
+    bedrock_embedding_model_id: str = "amazon.titan-embed-text-v2:0"
+    bedrock_embedding_dimensions: int = 256
+    bedrock_embedding_normalize: bool = True

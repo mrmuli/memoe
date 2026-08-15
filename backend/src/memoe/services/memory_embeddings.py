@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
-import math
+import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import boto3
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from memoe.config import Settings
 from memoe.db.connection import connect
 
-EMBEDDING_DIMENSIONS = 64
-EMBEDDING_MODEL = "memoe-hash-v1"
+EMBEDDING_DIMENSIONS = 256
+EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_\-:.]*")
 
 
@@ -47,13 +47,14 @@ class MemorySearchResult:
 
 def refresh_memory_embeddings(settings: Settings | None = None) -> EmbeddingRefreshResult:
     """Refresh embeddings for observations, reflections, and validation results."""
+    resolved_settings = settings or Settings()
     embedded = 0
     counts = {"observation": 0, "reflection": 0, "validation_result": 0}
 
-    with connect(settings) as connection:
+    with connect(resolved_settings) as connection:
         rows = fetch_memory_rows(connection)
         for row in rows:
-            embedding = embed_text(row["embedded_text"])
+            embedding = embed_text(row["embedded_text"], resolved_settings)
             upsert_memory_embedding(
                 connection=connection,
                 memory_type=row["memory_type"],
@@ -61,6 +62,7 @@ def refresh_memory_embeddings(settings: Settings | None = None) -> EmbeddingRefr
                 embedded_text=row["embedded_text"],
                 embedding=embedding,
                 metadata=row["metadata"],
+                settings=resolved_settings,
             )
             embedded += 1
             counts[row["memory_type"]] += 1
@@ -152,10 +154,13 @@ def upsert_memory_embedding(
     embedded_text: str,
     embedding: list[float],
     metadata: dict[str, Any],
+    settings: Settings,
 ) -> None:
     """Store one memory embedding."""
+    dimensions = embedding_dimensions(settings)
+    model_id = embedding_model_id(settings)
     connection.execute(
-        """
+        f"""
         INSERT INTO memory_embeddings (
           memory_type,
           memory_id,
@@ -164,7 +169,7 @@ def upsert_memory_embedding(
           embedded_text,
           metadata
         )
-        VALUES (%s, %s, %s, %s::VECTOR(64), %s, %s)
+        VALUES (%s, %s, %s, %s::VECTOR({dimensions}), %s, %s)
         ON CONFLICT (memory_type, memory_id, embedding_model)
         DO UPDATE SET
           embedding = excluded.embedding,
@@ -175,7 +180,7 @@ def upsert_memory_embedding(
         (
             memory_type,
             memory_id,
-            EMBEDDING_MODEL,
+            model_id,
             vector_literal(embedding),
             embedded_text,
             Jsonb(metadata),
@@ -190,24 +195,27 @@ def search_memory(
     settings: Settings | None = None,
 ) -> list[MemorySearchResult]:
     """Search memory with vector similarity plus simple metadata scoring."""
-    query_embedding = vector_literal(embed_text(goal))
+    resolved_settings = settings or Settings()
+    dimensions = embedding_dimensions(resolved_settings)
+    model_id = embedding_model_id(resolved_settings)
+    query_embedding = vector_literal(embed_text(goal, resolved_settings))
     candidate_limit = max(limit * 4, 20)
 
-    with connect(settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
+    with connect(resolved_settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
-            """
+            f"""
             SELECT
               memory_type,
               memory_id,
               embedded_text,
               metadata,
-              1 - (embedding <=> %s::VECTOR(64)) AS vector_similarity
+              1 - (embedding <=> %s::VECTOR({dimensions})) AS vector_similarity
             FROM memory_embeddings
             WHERE embedding_model = %s
-            ORDER BY embedding <=> %s::VECTOR(64)
+            ORDER BY embedding <=> %s::VECTOR({dimensions})
             LIMIT %s
             """,
-            (query_embedding, EMBEDDING_MODEL, query_embedding, candidate_limit),
+            (query_embedding, model_id, query_embedding, candidate_limit),
         )
         rows = [dict(row) for row in cursor.fetchall()]
 
@@ -253,21 +261,57 @@ def score_memory_row(
     )
 
 
-def embed_text(text: str) -> list[float]:
-    """Create a deterministic local text embedding for vector-search plumbing."""
-    vector = [0.0] * EMBEDDING_DIMENSIONS
-    tokens = TOKEN_PATTERN.findall(text.lower())
-    for token in tokens:
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        index = int.from_bytes(digest[:2], "big") % EMBEDDING_DIMENSIONS
-        sign = 1.0 if digest[2] % 2 == 0 else -1.0
-        vector[index] += sign
+def embed_text(text: str, settings: Settings) -> list[float]:
+    """Generate a Titan text embedding with Bedrock."""
+    body = {
+        "inputText": text,
+        "dimensions": embedding_dimensions(settings),
+        "normalize": settings.bedrock_embedding_normalize,
+    }
+    response = bedrock_runtime_client(settings).invoke_model(
+        modelId=embedding_model_id(settings),
+        body=json.dumps(body),
+        accept="application/json",
+        contentType="application/json",
+    )
+    payload = json.loads(response["body"].read())
+    embedding = payload.get("embedding")
+    if not isinstance(embedding, list):
+        raise TypeError("Bedrock Titan embedding response did not include an embedding list.")
 
-    norm = math.sqrt(sum(value * value for value in vector))
-    if norm == 0:
-        return vector
+    return [float(value) for value in embedding]
 
-    return [round(value / norm, 6) for value in vector]
+
+def bedrock_runtime_client(settings: Settings):
+    """Create a Bedrock Runtime client from the local AWS environment."""
+    if not settings.aws_region:
+        raise ValueError("AWS_REGION is required for Bedrock embedding runs.")
+
+    session_kwargs: dict[str, str] = {"region_name": str(settings.aws_region)}
+    if settings.aws_profile:
+        session_kwargs["profile_name"] = settings.aws_profile
+
+    session = boto3.Session(**session_kwargs)
+    return session.client("bedrock-runtime")
+
+
+def embedding_model_id(settings: Settings) -> str:
+    """Return the configured embedding model ID."""
+    return settings.bedrock_embedding_model_id or EMBEDDING_MODEL
+
+
+def embedding_dimensions(settings: Settings) -> int:
+    """Return and validate the configured embedding dimensions."""
+    dimensions = int(settings.bedrock_embedding_dimensions)
+    if dimensions != EMBEDDING_DIMENSIONS:
+        raise ValueError(f"Memoe currently stores embeddings in VECTOR({EMBEDDING_DIMENSIONS}).")
+    return dimensions
+
+
+def reset_memory_embedding_index(settings: Settings | None = None) -> None:
+    """Drop the derived embedding index so it can be recreated with current dimensions."""
+    with connect(settings) as connection:
+        connection.execute("DROP TABLE IF EXISTS memory_embeddings")
 
 
 def vector_literal(embedding: list[float]) -> str:
