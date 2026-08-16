@@ -132,7 +132,7 @@ def generate_answer_with_bedrock(state: ChatGraphState, settings: Settings) -> s
             }
         ],
         inferenceConfig={
-            "maxTokens": min(settings.bedrock_max_tokens, 700),
+            "maxTokens": settings.bedrock_max_tokens,
             "temperature": settings.bedrock_temperature,
         },
     )

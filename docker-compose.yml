@@ -7,6 +7,44 @@ services:
       - "8080:8080"
     volumes:
       - cockroach-data:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD", "cockroach", "sql", "--insecure", "--host=localhost:26257", "--execute=SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      cockroach-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://root@cockroach:26257/memoe?sslmode=disable
+      AWS_SHARED_CREDENTIALS_FILE: /root/.aws/credentials
+      AWS_CONFIG_FILE: /root/.aws/config
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "uv run memoe database init &&
+      uv run uvicorn memoe.api.app:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_MEMOE_API_BASE: http://localhost:8000
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_MEMOE_API_BASE: http://localhost:8000
+    ports:
+      - "3000:3000"
+    command: npm run start -- --hostname 0.0.0.0 --port 3000
 
   bge-embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
@@ -17,6 +55,17 @@ services:
       - "8081:80"
     volumes:
       - tei-data:/data
+
+  cockroach-init:
+    image: cockroachdb/cockroach:latest-v25.3
+    depends_on:
+      cockroach:
+        condition: service_healthy
+    command:
+      - sql
+      - --insecure
+      - --host=cockroach:26257
+      - --execute=CREATE DATABASE IF NOT EXISTS memoe;
 
 volumes:
   cockroach-data:

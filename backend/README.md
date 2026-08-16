@@ -16,10 +16,16 @@ uv run memoe observations show latest
 
 ## API
 
-Run the local API:
+Run the local API directly:
 
 ```bash
 uv run uvicorn memoe.api.app:app --host 127.0.0.1 --port 8000
+```
+
+Or run it through Docker Compose from the repository root:
+
+```bash
+docker compose up -d cockroach backend
 ```
 
 Useful endpoints:
