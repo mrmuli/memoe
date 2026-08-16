@@ -23,6 +23,8 @@ For product and architecture experiments, aim at the meaningful unknowns directl
 
 Do not assume the user wants a cheaper, safer, simpler, or less ambitious path. State the tradeoff and ask when the direction is unclear.
 
+Do not prefer hardcoded product-understanding or routing logic for Memoe. For example, do not silently add keyword classifiers for concepts such as SLOs, logs, tickets, deployments, traces, incidents, or service risks. Prefer model-routed or data-driven behavior, with deterministic code reserved for validation, persistence, security, cost control, and guardrails. If a hardcoded shortcut is being considered for time pressure, call it out explicitly and ask first.
+
 ## Permission Before Progressing
 
 Before starting each next major step, ask for permission.

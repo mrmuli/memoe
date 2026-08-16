@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
@@ -11,11 +12,8 @@ from langgraph.graph import END, START, StateGraph
 
 from memoe.config import Settings
 from memoe.providers.bedrock import response_text
-from memoe.services.chat_evidence import (
-    classify_question_intent,
-    expand_evidence_for_memory,
-    should_expand_evidence,
-)
+from memoe.providers.observations import strip_json_code_fence
+from memoe.services.chat_evidence import expand_evidence_for_memory
 from memoe.services.memory_embeddings import (
     MemorySearchResult,
     refresh_memory_embeddings,
@@ -33,7 +31,7 @@ class ChatGraphState(TypedDict, total=False):
     limit: int
     reflect: bool
     working_memory: dict[str, Any] | None
-    question_intent: dict[str, bool]
+    question_route: dict[str, Any]
     retrieved_memory: list[dict[str, Any]]
     evidence_detail: list[dict[str, Any]]
     reflection: dict[str, Any] | None
@@ -68,7 +66,6 @@ def run_chat_graph(
             "limit": limit,
             "reflect": reflect,
             "working_memory": working_memory,
-            "question_intent": classify_question_intent(message),
         }
     )
     return ChatGraphResult(
@@ -81,6 +78,9 @@ def run_chat_graph(
 def build_chat_graph(settings: Settings):
     """Build the Memoe chat graph."""
 
+    def route_question(state: ChatGraphState) -> dict[str, Any]:
+        return {"question_route": generate_question_route_with_bedrock(state, settings)}
+
     def retrieve_memory(state: ChatGraphState) -> dict[str, Any]:
         results = search_memory(
             goal=state["message"],
@@ -91,7 +91,8 @@ def build_chat_graph(settings: Settings):
         return {"retrieved_memory": [memory_result_to_dict(row) for row in results]}
 
     def expand_evidence_detail(state: ChatGraphState) -> dict[str, Any]:
-        if not should_expand_evidence(state["message"]):
+        route = state.get("question_route", {})
+        if not route.get("needs_evidence_detail"):
             return {"evidence_detail": []}
         evidence = expand_evidence_for_memory(
             retrieved_memory=state.get("retrieved_memory", []),
@@ -120,11 +121,13 @@ def build_chat_graph(settings: Settings):
         return "answer"
 
     builder = StateGraph(ChatGraphState)
+    builder.add_node("route_question", route_question)
     builder.add_node("retrieve_memory", retrieve_memory)
     builder.add_node("expand_evidence_detail", expand_evidence_detail)
     builder.add_node("reflect", maybe_reflect)
     builder.add_node("answer", answer_with_memory)
-    builder.add_edge(START, "retrieve_memory")
+    builder.add_edge(START, "route_question")
+    builder.add_edge("route_question", "retrieve_memory")
     builder.add_edge("retrieve_memory", "expand_evidence_detail")
     builder.add_conditional_edges(
         "expand_evidence_detail",
@@ -134,6 +137,32 @@ def build_chat_graph(settings: Settings):
     builder.add_edge("reflect", "answer")
     builder.add_edge("answer", END)
     return builder.compile()
+
+
+def generate_question_route_with_bedrock(state: ChatGraphState, settings: Settings) -> dict[str, Any]:
+    """Use the model to route a chat question without hardcoded domain keywords."""
+    if not settings.aws_region:
+        raise ValueError("AWS_REGION is required for Memoe chat routing.")
+    if not settings.bedrock_model_id:
+        raise ValueError("BEDROCK_MODEL_ID is required for Memoe chat routing.")
+
+    client = bedrock_runtime_client(settings)
+    response = client.converse(
+        modelId=str(settings.bedrock_model_id),
+        system=[{"text": chat_route_system_prompt()}],
+        messages=[
+            {
+                "role": "user",
+                "content": [{"text": chat_route_user_prompt(state)}],
+            }
+        ],
+        inferenceConfig={
+            "maxTokens": min(settings.bedrock_max_tokens, 700),
+            "temperature": 0,
+        },
+    )
+    parsed = parse_json_object(response_text(response), "Bedrock chat router")
+    return normalize_question_route(parsed)
 
 
 def generate_answer_with_bedrock(state: ChatGraphState, settings: Settings) -> str:
@@ -179,8 +208,8 @@ Ask for clarification only when the question cannot be answered usefully without
 
 Adapt the answer shape to the user's question.
 If the user asks for a ticket number, Jira issue, or customer incident identifier, answer the ticket key first.
-If question_intent.ticket_lookup is false, do not lead with a ticket number even when Jira evidence is present.
-If question_intent.slo_detail is true, focus on the SLO/alarm details first: metric, alarm name, time, severity, burn-rate windows, threshold, and missing SLO evidence.
+If question_route.answer_mode is not ticket_lookup, do not lead with a ticket number even when Jira evidence is present.
+Follow question_route.lead_with when it is supported by retrieved memory or expanded evidence.
 If expanded evidence contains an external_reference from jira_issue, treat that as the Jira ticket key only for ticket or customer incident questions.
 If the user asks for a timestamp, source, or detailed evidence, answer the relevant direct fact first.
 For detailed evidence, use short bullets grouped by source or timeline. Do not use a table.
@@ -207,7 +236,7 @@ def chat_user_prompt(state: ChatGraphState) -> str:
     payload = {
         "question": state["message"],
         "service_scope": state.get("service_scope"),
-        "question_intent": state.get("question_intent", {}),
+        "question_route": state.get("question_route", {}),
         "working_memory": state.get("working_memory"),
         "retrieved_memory": state.get("retrieved_memory", []),
         "evidence_detail": state.get("evidence_detail", []),
@@ -220,9 +249,91 @@ Context:
 """
 
 
+def chat_route_system_prompt() -> str:
+    """Build instructions for model-based chat routing."""
+    return """You route Memoe chat questions for an SRE intelligence application.
+
+Return only valid JSON.
+Do not answer the user.
+Infer the user's intent from meaning, not from fixed keywords.
+
+Schema:
+{
+  "answer_mode": "risk_summary | evidence_detail | ticket_lookup | slo_detail | log_detail | deployment_detail | comparison | clarification | general",
+  "focus": ["short focus terms"],
+  "needs_evidence_detail": true,
+  "lead_with": "the first thing the answer should address",
+  "reason": "brief routing reason"
+}
+
+Guidance:
+- Use ticket_lookup only when the user asks for a ticket, issue, incident identifier, or customer incident reference.
+- Use slo_detail when the user asks about SLOs, error budget, burn rates, objectives, alarms, or their measurements.
+- Use evidence_detail when the user asks to show proof, source records, timestamps, or supporting details.
+- Use log_detail when the user asks about logs or log events.
+- Use deployment_detail when the user asks about deploys, changes, commits, PRs, or rollbacks.
+- Set needs_evidence_detail true when raw events would materially improve the answer.
+- Set clarification only when the question cannot be answered usefully without a missing scope or target."""
+
+
+def chat_route_user_prompt(state: ChatGraphState) -> str:
+    """Build the user prompt for chat routing."""
+    payload = {
+        "question": state["message"],
+        "service_scope": state.get("service_scope"),
+        "working_memory": state.get("working_memory"),
+    }
+    return json.dumps(payload, indent=2, default=str)
+
+
+def normalize_question_route(route: dict[str, Any]) -> dict[str, Any]:
+    """Normalize model routing output to the fields the graph expects."""
+    allowed_modes = {
+        "risk_summary",
+        "evidence_detail",
+        "ticket_lookup",
+        "slo_detail",
+        "log_detail",
+        "deployment_detail",
+        "comparison",
+        "clarification",
+        "general",
+    }
+    answer_mode = str(route.get("answer_mode", "general"))
+    if answer_mode not in allowed_modes:
+        answer_mode = "general"
+
+    focus = route.get("focus", [])
+    if not isinstance(focus, list):
+        focus = [str(focus)]
+
+    return {
+        "answer_mode": answer_mode,
+        "focus": [str(item) for item in focus[:8]],
+        "needs_evidence_detail": bool(route.get("needs_evidence_detail", False)),
+        "lead_with": str(route.get("lead_with", answer_mode)),
+        "reason": str(route.get("reason", "")),
+    }
+
+
+def parse_json_object(content: str, provider_name: str) -> dict[str, Any]:
+    """Parse a model response that should contain one JSON object."""
+    stripped = strip_json_code_fence(content)
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{provider_name} returned non-JSON content: {content}") from error
+
+    if not isinstance(parsed, dict):
+        raise TypeError(f"{provider_name} response JSON must be an object.")
+    return parsed
+
+
 def normalize_chat_answer(answer: str) -> str:
     """Remove presentation markup that makes chat responses feel templated."""
-    return answer.replace("**", "").replace("*", "").replace("`", "")
+    clean = answer.replace("**", "").replace("*", "").replace("`", "")
+    clean = re.sub(r"\bcaused\b", "was associated with", clean, flags=re.IGNORECASE)
+    return re.sub(r"\bcausing\b", "being associated with", clean, flags=re.IGNORECASE)
 
 
 def bedrock_runtime_client(settings: Settings):
