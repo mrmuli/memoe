@@ -412,9 +412,48 @@ summary {
   margin-top: 14px;
 }
 
+.memory-filter {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.memory-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.memory-filter button.active {
+  border-color: var(--border);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.memory-filter span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .memory-section {
   min-width: 0;
   padding: 12px;
+}
+
+.memory-section-full {
+  margin-top: 14px;
 }
 
 .section-heading {

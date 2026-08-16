@@ -6,6 +6,8 @@ import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_MEMOE_API_BASE ?? "http://localhost:8000";
 
+type MemoryView = "reflections" | "observations";
+
 type Observation = {
   id: string;
   service_slug: string;
@@ -43,6 +45,7 @@ type ReflectionJob = {
 export default function MemoryPage() {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [memoryView, setMemoryView] = useState<MemoryView>("reflections");
   const [reflectionJob, setReflectionJob] = useState<ReflectionJob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,47 +150,54 @@ export default function MemoryPage() {
           </div>
         )}
 
-        <div className="memory-grid">
-          <section className="memory-section">
-            <div className="section-heading">
-              <h2>Reflections</h2>
-              <span>{reflections.length}</span>
-            </div>
-            <div className="memory-list">
-              {reflections.map((reflection) => (
-                <MemoryCard
-                  key={reflection.id}
-                  title={reflection.reflection_type}
-                  label={`${reflection.evidence_quality_rating} · seen ${
-                    reflection.occurrence_count ?? 1
-                  }x · ${formatDate(reflection.last_seen_at ?? reflection.created_at)}`}
-                  confidence={reflection.confidence}
-                  statement={reflection.statement}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section className="memory-section">
-            <div className="section-heading">
-              <h2>Observations</h2>
-              <span>{observations.length}</span>
-            </div>
-            <div className="memory-list">
-              {observations.map((observation) => (
-                <MemoryCard
-                  key={observation.id}
-                  title={observation.observation_type}
-                  label={`${observation.service_slug} · ${observation.evidence_quality_rating} · ${formatDate(
-                    observation.created_at,
-                  )}`}
-                  confidence={observation.confidence}
-                  statement={observation.statement}
-                />
-              ))}
-            </div>
-          </section>
+        <div className="memory-filter" aria-label="Memory type">
+          <button
+            className={memoryView === "reflections" ? "active" : undefined}
+            onClick={() => setMemoryView("reflections")}
+            type="button"
+          >
+            Reflections <span>{reflections.length}</span>
+          </button>
+          <button
+            className={memoryView === "observations" ? "active" : undefined}
+            onClick={() => setMemoryView("observations")}
+            type="button"
+          >
+            Observations <span>{observations.length}</span>
+          </button>
         </div>
+
+        <section className="memory-section memory-section-full">
+          <div className="section-heading">
+            <h2>{memoryView === "reflections" ? "Reflections" : "Observations"}</h2>
+            <span>{memoryView === "reflections" ? reflections.length : observations.length}</span>
+          </div>
+          <div className="memory-list">
+            {memoryView === "reflections"
+              ? reflections.map((reflection) => (
+                  <MemoryCard
+                    key={reflection.id}
+                    title={reflection.reflection_type}
+                    label={`${reflection.evidence_quality_rating} · seen ${
+                      reflection.occurrence_count ?? 1
+                    }x · ${formatDate(reflection.last_seen_at ?? reflection.created_at)}`}
+                    confidence={reflection.confidence}
+                    statement={reflection.statement}
+                  />
+                ))
+              : observations.map((observation) => (
+                  <MemoryCard
+                    key={observation.id}
+                    title={observation.observation_type}
+                    label={`${observation.service_slug} · ${observation.evidence_quality_rating} · ${formatDate(
+                      observation.created_at,
+                    )}`}
+                    confidence={observation.confidence}
+                    statement={observation.statement}
+                  />
+                ))}
+          </div>
+        </section>
       </section>
     </main>
   );
