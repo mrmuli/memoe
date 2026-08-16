@@ -6,7 +6,7 @@ The first target is documented in:
 
 - [`../ideas/first-cli-memory-test.md`](../ideas/first-cli-memory-test.md)
 
-## Planned Local Commands
+## Local Commands
 
 ```bash
 uv run memoe seed load payments
@@ -14,4 +14,21 @@ uv run memoe observations run --service payments --provider ollama
 uv run memoe observations show latest
 ```
 
-These commands are scaffolded but not implemented yet.
+## API
+
+Run the local API:
+
+```bash
+uv run uvicorn memoe.api.app:app --host 127.0.0.1 --port 8000
+```
+
+Useful endpoints:
+
+```text
+GET  /services
+GET  /observations
+GET  /reflections
+POST /chat
+POST /observations/run
+POST /reflections/run
+```
