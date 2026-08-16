@@ -24,11 +24,37 @@ EVIDENCE_KEYWORDS = (
     "share",
 )
 
+TICKET_KEYWORDS = (
+    "ticket",
+    "jira",
+    "issue key",
+    "issue number",
+    "incident number",
+    "ticket number",
+)
+
+SLO_KEYWORDS = (
+    "slo",
+    "service level objective",
+    "burn rate",
+    "alarm",
+)
+
 
 def should_expand_evidence(message: str) -> bool:
     """Return true when a user asks for raw supporting evidence."""
     normalized = message.lower()
     return any(keyword in normalized for keyword in EVIDENCE_KEYWORDS)
+
+
+def classify_question_intent(message: str) -> dict[str, bool]:
+    """Classify lightweight chat intent for answer shaping."""
+    normalized = message.lower()
+    return {
+        "ticket_lookup": any(keyword in normalized for keyword in TICKET_KEYWORDS),
+        "slo_detail": any(keyword in normalized for keyword in SLO_KEYWORDS),
+        "evidence_detail": should_expand_evidence(message),
+    }
 
 
 def expand_evidence_for_memory(

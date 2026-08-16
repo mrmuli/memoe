@@ -11,7 +11,11 @@ from langgraph.graph import END, START, StateGraph
 
 from memoe.config import Settings
 from memoe.providers.bedrock import response_text
-from memoe.services.chat_evidence import expand_evidence_for_memory, should_expand_evidence
+from memoe.services.chat_evidence import (
+    classify_question_intent,
+    expand_evidence_for_memory,
+    should_expand_evidence,
+)
 from memoe.services.memory_embeddings import (
     MemorySearchResult,
     refresh_memory_embeddings,
@@ -29,6 +33,7 @@ class ChatGraphState(TypedDict, total=False):
     limit: int
     reflect: bool
     working_memory: dict[str, Any] | None
+    question_intent: dict[str, bool]
     retrieved_memory: list[dict[str, Any]]
     evidence_detail: list[dict[str, Any]]
     reflection: dict[str, Any] | None
@@ -63,6 +68,7 @@ def run_chat_graph(
             "limit": limit,
             "reflect": reflect,
             "working_memory": working_memory,
+            "question_intent": classify_question_intent(message),
         }
     )
     return ChatGraphResult(
@@ -172,8 +178,11 @@ For broad questions, focus on the top relevant services, up to five, instead of 
 Ask for clarification only when the question cannot be answered usefully without a narrower scope.
 
 Adapt the answer shape to the user's question.
-If the user asks for a ticket number, identifier, timestamp, source, or detailed evidence, answer the direct fact in the first sentence.
-If expanded evidence contains an external_reference from jira_issue, treat that as the Jira ticket key.
+If the user asks for a ticket number, Jira issue, or customer incident identifier, answer the ticket key first.
+If question_intent.ticket_lookup is false, do not lead with a ticket number even when Jira evidence is present.
+If question_intent.slo_detail is true, focus on the SLO/alarm details first: metric, alarm name, time, severity, burn-rate windows, threshold, and missing SLO evidence.
+If expanded evidence contains an external_reference from jira_issue, treat that as the Jira ticket key only for ticket or customer incident questions.
+If the user asks for a timestamp, source, or detailed evidence, answer the relevant direct fact first.
 For detailed evidence, use short bullets grouped by source or timeline. Do not use a table.
 For risk or pattern summaries, answer in concise natural language and include concrete operational implications.
 Use bullets only when they make evidence easier to scan.
@@ -198,6 +207,7 @@ def chat_user_prompt(state: ChatGraphState) -> str:
     payload = {
         "question": state["message"],
         "service_scope": state.get("service_scope"),
+        "question_intent": state.get("question_intent", {}),
         "working_memory": state.get("working_memory"),
         "retrieved_memory": state.get("retrieved_memory", []),
         "evidence_detail": state.get("evidence_detail", []),
