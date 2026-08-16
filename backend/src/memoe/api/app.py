@@ -13,6 +13,13 @@ from pydantic import BaseModel, Field
 from memoe.config import Settings
 from memoe.db.connection import connect
 from memoe.services.chat_graph import run_chat_graph
+from memoe.services.chat_sessions import (
+    create_session,
+    get_or_create_latest_session,
+    get_session,
+    save_chat_message,
+    update_working_memory_after_turn,
+)
 from memoe.services.memory_embeddings import refresh_memory_embeddings
 from memoe.services.observation_runner import list_observations, run_observation
 from memoe.services.reflection_runner import list_reflections, run_reflection
@@ -34,6 +41,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     """Request body for a Memoe chat turn."""
 
+    session_id: str | None = None
     message: str = Field(min_length=1)
     service_scope: str | None = None
     limit: int = Field(default=6, ge=1, le=20)
@@ -54,6 +62,13 @@ class ReflectionRunRequest(BaseModel):
     service_scope: str | None = None
     provider: str = "bedrock"
     limit: int = Field(default=8, ge=1, le=20)
+
+
+class ChatSessionCreateRequest(BaseModel):
+    """Request body for creating a chat session."""
+
+    message: str | None = None
+    service_scope: str | None = None
 
 
 @app.get("/health")
@@ -107,6 +122,40 @@ def reflections(limit: int = 20) -> list[dict[str, Any]]:
     return [asdict(row) for row in list_reflections(limit=limit)]
 
 
+@app.get("/chat/sessions/latest")
+def latest_chat_session() -> dict[str, Any]:
+    """Load the latest active chat session."""
+    try:
+        session = get_or_create_latest_session(Settings())
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return asdict(session)
+
+
+@app.post("/chat/sessions")
+def create_chat_session(request: ChatSessionCreateRequest) -> dict[str, Any]:
+    """Create a new chat session."""
+    try:
+        session = create_session(
+            message=request.message,
+            service_scope=request.service_scope,
+            settings=Settings(),
+        )
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return asdict(session)
+
+
+@app.get("/chat/sessions/{session_id}")
+def chat_session(session_id: str) -> dict[str, Any]:
+    """Load one chat session."""
+    try:
+        session = get_session(session_id, Settings())
+    except Exception as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return asdict(session)
+
+
 @app.post("/observations/run")
 def run_observation_endpoint(request: ObservationRunRequest) -> dict[str, Any]:
     """Run observation generation for one service."""
@@ -140,16 +189,54 @@ def run_reflection_endpoint(request: ReflectionRunRequest) -> dict[str, Any]:
 @app.post("/chat")
 def chat(request: ChatRequest) -> dict[str, Any]:
     """Ask Memoe a question."""
+    settings = Settings()
     try:
+        session = (
+            get_session(request.session_id, settings)
+            if request.session_id
+            else create_session(
+                message=request.message,
+                service_scope=request.service_scope,
+                settings=settings,
+            )
+        )
+        save_chat_message(
+            session_id=session.id,
+            role="user",
+            content=request.message,
+            settings=settings,
+        )
         result = run_chat_graph(
             message=request.message,
             provider="bedrock",
             service_scope=request.service_scope,
             limit=request.limit,
             reflect=request.reflect,
-            settings=Settings(),
+            working_memory=session.working_memory,
+            settings=settings,
+        )
+        reflection_id = result.reflection["reflection_id"] if result.reflection else None
+        save_chat_message(
+            session_id=session.id,
+            role="assistant",
+            content=result.answer,
+            retrieved_memory=result.retrieved_memory,
+            reflection_id=reflection_id,
+            settings=settings,
+        )
+        working_memory = update_working_memory_after_turn(
+            session_id=session.id,
+            user_message=request.message,
+            service_scope=request.service_scope,
+            answer=result.answer,
+            retrieved_memory=result.retrieved_memory,
+            reflection_id=reflection_id,
+            settings=settings,
         )
     except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    return asdict(result)
+    payload = asdict(result)
+    payload["session_id"] = session.id
+    payload["working_memory"] = working_memory
+    return payload

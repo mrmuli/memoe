@@ -6,6 +6,7 @@ import {
   Database,
   Loader2,
   MessageSquare,
+  Plus,
   RefreshCw,
   Search,
   Sparkles,
@@ -59,14 +60,36 @@ type ChatMessage = {
   reflectionId?: string;
 };
 
+type PersistedChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  retrieved_memory: MemoryHit[];
+  reflection_id: string | null;
+  created_at: string;
+};
+
+type ChatSession = {
+  id: string;
+  title: string;
+  service_scope: string | null;
+  status: string;
+  working_memory: {
+    turn_count?: number;
+    current_goal?: string | null;
+    active_services?: string[];
+    last_reflection_id?: string | null;
+  };
+  messages: PersistedChatMessage[];
+};
+
 export default function Home() {
   const [services, setServices] = useState<Service[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [selectedService, setSelectedService] = useState<string>("");
-  const [message, setMessage] = useState(
-    "What should SREs pay attention to for customer reports not covered by SLOs?",
-  );
+  const [session, setSession] = useState<ChatSession | null>(null);
+  const [message, setMessage] = useState("");
   const [reflect, setReflect] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +107,15 @@ export default function Home() {
     setReflections(reflectionRows);
   }
 
+  async function loadLatestSession() {
+    const sessionRow = await api<ChatSession>("/chat/sessions/latest");
+    setSession(sessionRow);
+    setSelectedService(sessionRow.service_scope ?? "");
+    setChat(sessionRow.messages.map(messageFromSession));
+  }
+
   useEffect(() => {
-    loadData().catch((err: Error) => setError(err.message));
+    Promise.all([loadData(), loadLatestSession()]).catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -104,12 +134,15 @@ export default function Home() {
 
     try {
       const response = await api<{
+        session_id: string;
         answer: string;
         retrieved_memory: MemoryHit[];
         reflection: { reflection_id: string } | null;
+        working_memory: ChatSession["working_memory"];
       }>("/chat", {
         method: "POST",
         body: JSON.stringify({
+          session_id: session?.id ?? null,
           message: userMessage,
           service_scope: selectedService || null,
           limit: 6,
@@ -125,6 +158,24 @@ export default function Home() {
           reflectionId: response.reflection?.reflection_id,
         },
       ]);
+      setSession((current) =>
+        current
+          ? {
+              ...current,
+              id: response.session_id,
+              service_scope: selectedService || null,
+              working_memory: response.working_memory,
+            }
+          : {
+              id: response.session_id,
+              title: userMessage,
+              service_scope: selectedService || null,
+              status: "active",
+              working_memory: response.working_memory,
+              messages: [],
+            },
+      );
+      setMessage("");
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chat request failed");
@@ -171,6 +222,24 @@ export default function Home() {
     }
   }
 
+  async function startNewSession() {
+    setBusy("session");
+    setError(null);
+    try {
+      const sessionRow = await api<ChatSession>("/chat/sessions", {
+        method: "POST",
+        body: JSON.stringify({ service_scope: selectedService || null }),
+      });
+      setSession(sessionRow);
+      setChat([]);
+      setMessage("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Session creation failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -212,6 +281,10 @@ export default function Home() {
 
         <section className="panel">
           <h2>Actions</h2>
+          <button className="action-button secondary" onClick={startNewSession} disabled={busy !== null}>
+            {busy === "session" ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
+            New session
+          </button>
           <button
             className="action-button"
             onClick={runObservation}
@@ -234,7 +307,10 @@ export default function Home() {
         <div className="topbar">
           <div>
             <h2>Conversation</h2>
-            <p>{selectedService ? `Scoped to ${selectedService}` : "All services"}</p>
+            <p>
+              {selectedService ? `Scoped to ${selectedService}` : "All services"} ·{" "}
+              {session?.working_memory.turn_count ?? 0} turns saved
+            </p>
           </div>
           <label className="toggle">
             <input
@@ -281,6 +357,7 @@ export default function Home() {
           <textarea
             value={message}
             onChange={(event) => setMessage(event.target.value)}
+            placeholder="Ask about service risk, evidence gaps, or emerging operational patterns."
             rows={3}
           />
           <button disabled={busy !== null || !message.trim()}>
@@ -346,6 +423,15 @@ function MemoryCard({
       <small>confidence {confidence.toFixed(2)}</small>
     </article>
   );
+}
+
+function messageFromSession(row: PersistedChatMessage): ChatMessage {
+  return {
+    role: row.role,
+    content: row.content,
+    retrievedMemory: row.retrieved_memory,
+    reflectionId: row.reflection_id ?? undefined,
+  };
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

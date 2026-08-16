@@ -27,6 +27,7 @@ class ChatGraphState(TypedDict, total=False):
     service_scope: str | None
     limit: int
     reflect: bool
+    working_memory: dict[str, Any] | None
     retrieved_memory: list[dict[str, Any]]
     reflection: dict[str, Any] | None
     answer: str
@@ -47,6 +48,7 @@ def run_chat_graph(
     service_scope: str | None = None,
     limit: int = 8,
     reflect: bool = False,
+    working_memory: dict[str, Any] | None = None,
     settings: Settings | None = None,
 ) -> ChatGraphResult:
     """Run a Memoe conversation turn through LangGraph."""
@@ -58,6 +60,7 @@ def run_chat_graph(
             "service_scope": service_scope,
             "limit": limit,
             "reflect": reflect,
+            "working_memory": working_memory,
         }
     )
     return ChatGraphResult(
@@ -152,6 +155,7 @@ Use plain text section headings. Do not wrap headings in Markdown.
 Do not restate every retrieved memory.
 Do not invent facts or imply causality beyond the evidence.
 Treat retrieved observations and reflections as memory claims with evidence quality, not absolute truth.
+Use working memory as current conversation state, but prefer retrieved memory for factual claims.
 If no service scope is provided, answer across the most relevant services in retrieved memory.
 For broad questions, focus on the top relevant services, up to five, instead of asking the user to choose a service.
 Ask for clarification only when the question cannot be answered usefully without a narrower scope.
@@ -180,6 +184,7 @@ def chat_user_prompt(state: ChatGraphState) -> str:
     payload = {
         "question": state["message"],
         "service_scope": state.get("service_scope"),
+        "working_memory": state.get("working_memory"),
         "retrieved_memory": state.get("retrieved_memory", []),
         "generated_reflection": state.get("reflection"),
     }

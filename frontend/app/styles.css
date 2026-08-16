@@ -167,6 +167,12 @@ h2 {
   color: #ffffff;
 }
 
+.action-button.secondary {
+  border-color: var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
 .action-note {
   margin-top: 8px;
   color: var(--muted);

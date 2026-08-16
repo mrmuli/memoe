@@ -291,3 +291,31 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
 
 CREATE INDEX IF NOT EXISTS memory_embeddings_type_model_idx
   ON memory_embeddings (memory_type, embedding_model);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title STRING NOT NULL,
+  service_scope STRING NULL,
+  status STRING NOT NULL DEFAULT 'active',
+  working_memory JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chat_sessions_status_check CHECK (status IN ('active', 'archived'))
+);
+
+CREATE INDEX IF NOT EXISTS chat_sessions_status_updated_at_idx
+  ON chat_sessions (status, updated_at);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  role STRING NOT NULL,
+  content STRING NOT NULL,
+  retrieved_memory JSONB NOT NULL DEFAULT '[]'::JSONB,
+  reflection_id UUID NULL REFERENCES reflections(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chat_messages_role_check CHECK (role IN ('user', 'assistant'))
+);
+
+CREATE INDEX IF NOT EXISTS chat_messages_session_created_at_idx
+  ON chat_messages (session_id, created_at);
