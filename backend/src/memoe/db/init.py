@@ -5,7 +5,6 @@ from pathlib import Path
 from memoe.config import Settings
 from memoe.db.connection import connect
 
-
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
