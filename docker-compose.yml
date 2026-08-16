@@ -26,7 +26,7 @@ services:
       AWS_SHARED_CREDENTIALS_FILE: /root/.aws/credentials
       AWS_CONFIG_FILE: /root/.aws/config
     volumes:
-      - ${HOME}/.aws:/root/.aws:ro
+      - ${HOME}/.aws:/root/.aws
     ports:
       - "8000:8000"
     command: >

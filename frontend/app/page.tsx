@@ -82,9 +82,6 @@ export default function Home() {
     setServices(serviceRows);
     setObservations(observationRows);
     setReflections(reflectionRows);
-    if (!selectedService && serviceRows.length > 0) {
-      setSelectedService(serviceRows[0].slug);
-    }
   }
 
   useEffect(() => {
@@ -193,6 +190,13 @@ export default function Home() {
             </button>
           </div>
           <div className="service-list">
+            <button
+              className={selectedService === "" ? "service active" : "service"}
+              onClick={() => setSelectedService("")}
+            >
+              <span>All services</span>
+              <small>{services.reduce((total, service) => total + service.event_count, 0)} events</small>
+            </button>
             {services.map((service) => (
               <button
                 key={service.slug}
@@ -208,10 +212,17 @@ export default function Home() {
 
         <section className="panel">
           <h2>Actions</h2>
-          <button className="action-button" onClick={runObservation} disabled={busy !== null}>
+          <button
+            className="action-button"
+            onClick={runObservation}
+            disabled={busy !== null || !selectedService}
+          >
             {busy === "observation" ? <Loader2 className="spin" size={16} /> : <Search size={16} />}
             Run observation
           </button>
+          {!selectedService && (
+            <p className="action-note">Select one service before running an observation.</p>
+          )}
           <button className="action-button" onClick={runReflection} disabled={busy !== null}>
             {busy === "reflection" ? <Loader2 className="spin" size={16} /> : <Brain size={16} />}
             Run reflection

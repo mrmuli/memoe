@@ -22,7 +22,7 @@ The backend is available at:
 http://127.0.0.1:8000
 ```
 
-The backend container reads `.env` and mounts your local AWS config from `~/.aws` read-only so Bedrock can use `AWS_PROFILE`.
+The backend container reads `.env` and mounts your local AWS config from `~/.aws` so Bedrock can use `AWS_PROFILE`. AWS SSO may write refreshed token cache files during a chat request.
 
 Stop the stack:
 
