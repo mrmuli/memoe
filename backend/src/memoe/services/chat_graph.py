@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 
 from memoe.config import Settings
 from memoe.providers.bedrock import response_text
+from memoe.services.chat_evidence import expand_evidence_for_memory, should_expand_evidence
 from memoe.services.memory_embeddings import (
     MemorySearchResult,
     refresh_memory_embeddings,
@@ -29,6 +30,7 @@ class ChatGraphState(TypedDict, total=False):
     reflect: bool
     working_memory: dict[str, Any] | None
     retrieved_memory: list[dict[str, Any]]
+    evidence_detail: list[dict[str, Any]]
     reflection: dict[str, Any] | None
     answer: str
 
@@ -82,6 +84,15 @@ def build_chat_graph(settings: Settings):
         )
         return {"retrieved_memory": [memory_result_to_dict(row) for row in results]}
 
+    def expand_evidence_detail(state: ChatGraphState) -> dict[str, Any]:
+        if not should_expand_evidence(state["message"]):
+            return {"evidence_detail": []}
+        evidence = expand_evidence_for_memory(
+            retrieved_memory=state.get("retrieved_memory", []),
+            settings=settings,
+        )
+        return {"evidence_detail": evidence}
+
     def maybe_reflect(state: ChatGraphState) -> dict[str, Any]:
         reflection = run_reflection(
             provider_name=state.get("provider", "bedrock"),
@@ -104,11 +115,13 @@ def build_chat_graph(settings: Settings):
 
     builder = StateGraph(ChatGraphState)
     builder.add_node("retrieve_memory", retrieve_memory)
+    builder.add_node("expand_evidence_detail", expand_evidence_detail)
     builder.add_node("reflect", maybe_reflect)
     builder.add_node("answer", answer_with_memory)
     builder.add_edge(START, "retrieve_memory")
+    builder.add_edge("retrieve_memory", "expand_evidence_detail")
     builder.add_conditional_edges(
-        "retrieve_memory",
+        "expand_evidence_detail",
         route_after_retrieval,
         {"reflect": "reflect", "answer": "answer"},
     )
@@ -139,7 +152,7 @@ def generate_answer_with_bedrock(state: ChatGraphState, settings: Settings) -> s
             "temperature": settings.bedrock_temperature,
         },
     )
-    return response_text(response)
+    return normalize_chat_answer(response_text(response))
 
 
 def chat_system_prompt() -> str:
@@ -148,22 +161,23 @@ def chat_system_prompt() -> str:
 
 Keep the answer scannable and operational.
 Use at most 90 words unless the user asks for more detail.
-Use exactly three sections matching the required items.
-Return plain text only.
-Use no more than two bullets per section.
-Use plain text section headings. Do not wrap headings in Markdown.
+Return plain text only. Do not use Markdown tables. Do not use Markdown bold.
 Do not restate every retrieved memory.
 Do not invent facts or imply causality beyond the evidence.
+Do not say caused or triggered unless the retrieved memory contains conclusive validation. Prefer associated with, followed by, or consistent with.
 Treat retrieved observations and reflections as memory claims with evidence quality, not absolute truth.
 Use working memory as current conversation state, but prefer retrieved memory for factual claims.
 If no service scope is provided, answer across the most relevant services in retrieved memory.
 For broad questions, focus on the top relevant services, up to five, instead of asking the user to choose a service.
 Ask for clarification only when the question cannot be answered usefully without a narrower scope.
 
-Always include:
-1. What Memoe sees
-2. What the users, who mostly are SREs, should check next
-3. Confidence and missing evidence
+Adapt the answer shape to the user's question.
+If the user asks for a ticket number, identifier, timestamp, source, or detailed evidence, answer the direct fact in the first sentence.
+If expanded evidence contains an external_reference from jira_issue, treat that as the Jira ticket key.
+For detailed evidence, use short bullets grouped by source or timeline. Do not use a table.
+For risk or pattern summaries, answer in concise natural language and include concrete operational implications.
+Use bullets only when they make evidence easier to scan.
+Mention confidence or missing evidence when it materially affects the answer.
 
 Prefer:
 - concrete service names
@@ -186,6 +200,7 @@ def chat_user_prompt(state: ChatGraphState) -> str:
         "service_scope": state.get("service_scope"),
         "working_memory": state.get("working_memory"),
         "retrieved_memory": state.get("retrieved_memory", []),
+        "evidence_detail": state.get("evidence_detail", []),
         "generated_reflection": state.get("reflection"),
     }
     return f"""Answer the user question using this Memoe context.
@@ -193,6 +208,11 @@ def chat_user_prompt(state: ChatGraphState) -> str:
 Context:
 {json.dumps(payload, indent=2, default=str)}
 """
+
+
+def normalize_chat_answer(answer: str) -> str:
+    """Remove presentation markup that makes chat responses feel templated."""
+    return answer.replace("**", "").replace("*", "").replace("`", "")
 
 
 def bedrock_runtime_client(settings: Settings):
