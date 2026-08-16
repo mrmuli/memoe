@@ -11,6 +11,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_MEMOE_API_BASE ?? "http://localhost:8000";
 
@@ -22,18 +23,6 @@ type Service = {
   event_count: number;
 };
 
-type Observation = {
-  id: string;
-  service_slug: string;
-  created_at: string;
-  model_id: string;
-  observation_type: string;
-  confidence: number;
-  evidence_quality_rating: string;
-  lifecycle_status: string;
-  statement: string;
-};
-
 type Reflection = {
   id: string;
   created_at: string;
@@ -42,6 +31,15 @@ type Reflection = {
   confidence: number;
   evidence_quality_rating: string;
   statement: string;
+};
+
+type ReflectionRunResponse = {
+  reflection_id: string;
+  statement: string;
+  confidence: number;
+  evidence_quality: {
+    rating?: string;
+  };
 };
 
 type MemoryHit = {
@@ -85,9 +83,9 @@ type ChatSession = {
 
 export default function Home() {
   const [services, setServices] = useState<Service[]>([]);
-  const [observations, setObservations] = useState<Observation[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [selectedService, setSelectedService] = useState<string>("");
+  const [latestReflection, setLatestReflection] = useState<ReflectionRunResponse | null>(null);
   const [session, setSession] = useState<ChatSession | null>(null);
   const [message, setMessage] = useState("");
   const [reflect, setReflect] = useState(false);
@@ -97,13 +95,11 @@ export default function Home() {
 
   async function loadData() {
     setError(null);
-    const [serviceRows, observationRows, reflectionRows] = await Promise.all([
+    const [serviceRows, reflectionRows] = await Promise.all([
       api<Service[]>("/services"),
-      api<Observation[]>("/observations?limit=20"),
       api<Reflection[]>("/reflections?limit=20"),
     ]);
     setServices(serviceRows);
-    setObservations(observationRows);
     setReflections(reflectionRows);
   }
 
@@ -119,10 +115,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const scopedObservations = useMemo(() => {
-    if (!selectedService) return observations;
-    return observations.filter((row) => row.service_slug === selectedService);
-  }, [observations, selectedService]);
+  const newestReflection = useMemo(() => reflections[0] ?? null, [reflections]);
 
   async function submitChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,7 +198,7 @@ export default function Home() {
     setBusy("reflection");
     setError(null);
     try {
-      await api("/reflections/run", {
+      const result = await api<ReflectionRunResponse>("/reflections/run", {
         method: "POST",
         body: JSON.stringify({
           goal: message,
@@ -214,6 +207,7 @@ export default function Home() {
           limit: 8,
         }),
       });
+      setLatestReflection(result);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reflection run failed");
@@ -250,6 +244,15 @@ export default function Home() {
             <p>Operational memory</p>
           </div>
         </div>
+
+        <section className="panel nav-panel">
+          <Link href="/" className="nav-link active">
+            Conversation
+          </Link>
+          <Link href="/memory" className="nav-link">
+            Memory
+          </Link>
+        </section>
 
         <section className="panel">
           <div className="panel-header">
@@ -324,6 +327,32 @@ export default function Home() {
 
         {error && <div className="error">{error}</div>}
 
+        {latestReflection && (
+          <div className="latest-memory">
+            <div>
+              <strong>New reflection stored</strong>
+              <span>
+                confidence {latestReflection.confidence.toFixed(2)} ·{" "}
+                {latestReflection.evidence_quality.rating ?? "unknown evidence"}
+              </span>
+            </div>
+            <p>{latestReflection.statement}</p>
+          </div>
+        )}
+
+        {!latestReflection && newestReflection && (
+          <div className="latest-memory muted-memory">
+            <div>
+              <strong>Latest reflection</strong>
+              <span>
+                {new Date(newestReflection.created_at).toLocaleString()} · confidence{" "}
+                {newestReflection.confidence.toFixed(2)}
+              </span>
+            </div>
+            <p>{newestReflection.statement}</p>
+          </div>
+        )}
+
         <div className="messages">
           {chat.length === 0 && (
             <div className="empty-state">
@@ -367,61 +396,7 @@ export default function Home() {
         </form>
       </section>
 
-      <aside className="memory-panel">
-        <section>
-          <h2>Observations</h2>
-          <div className="memory-list">
-            {scopedObservations.map((observation) => (
-              <MemoryCard
-                key={observation.id}
-                title={observation.observation_type}
-                label={`${observation.service_slug} · ${observation.evidence_quality_rating}`}
-                confidence={observation.confidence}
-                statement={observation.statement}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h2>Reflections</h2>
-          <div className="memory-list">
-            {reflections.map((reflection) => (
-              <MemoryCard
-                key={reflection.id}
-                title={reflection.reflection_type}
-                label={reflection.evidence_quality_rating}
-                confidence={reflection.confidence}
-                statement={reflection.statement}
-              />
-            ))}
-          </div>
-        </section>
-      </aside>
     </main>
-  );
-}
-
-function MemoryCard({
-  title,
-  label,
-  confidence,
-  statement,
-}: {
-  title: string;
-  label: string;
-  confidence: number;
-  statement: string;
-}) {
-  return (
-    <article className="memory-card">
-      <div>
-        <strong>{title}</strong>
-        <span>{label}</span>
-      </div>
-      <p>{statement}</p>
-      <small>confidence {confidence.toFixed(2)}</small>
-    </article>
   );
 }
 

@@ -39,15 +39,24 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 280px minmax(420px, 1fr) 380px;
+  grid-template-columns: 280px minmax(420px, 1fr);
   gap: 16px;
   height: 100vh;
   padding: 16px;
 }
 
+.memory-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+}
+
 .sidebar,
 .chat-panel,
-.memory-panel {
+.memory-panel,
+.memory-workspace {
   min-height: 0;
 }
 
@@ -61,7 +70,9 @@ button:disabled {
 .brand,
 .panel,
 .chat-panel,
-.memory-panel section {
+.memory-panel section,
+.memory-workspace,
+.memory-section {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -104,6 +115,27 @@ h2 {
 
 .panel {
   padding: 12px;
+}
+
+.nav-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-link {
+  display: block;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.nav-link.active {
+  border-color: var(--accent);
+  background: #eef5ff;
 }
 
 .panel-header,
@@ -209,6 +241,42 @@ h2 {
   background: #fffbfa;
   color: var(--danger);
   font-size: 13px;
+}
+
+.latest-memory {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #b6d7ff;
+  border-radius: 6px;
+  background: #f6faff;
+}
+
+.latest-memory div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.latest-memory strong {
+  font-size: 13px;
+}
+
+.latest-memory span,
+.memory-header p,
+.section-heading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.latest-memory p {
+  margin-top: 8px;
+  line-height: 1.4;
+  font-size: 13px;
+}
+
+.muted-memory {
+  border-color: var(--border);
+  background: var(--panel-soft);
 }
 
 .messages {
@@ -319,6 +387,38 @@ summary {
   margin-top: 8px;
 }
 
+.memory-workspace {
+  padding: 14px;
+}
+
+.memory-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.memory-header h2 {
+  font-size: 16px;
+}
+
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.memory-section {
+  min-width: 0;
+  padding: 12px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .not-found {
   display: grid;
   min-height: 100vh;
@@ -342,6 +442,11 @@ summary {
     grid-template-columns: 240px minmax(0, 1fr);
   }
 
+  .memory-shell,
+  .memory-grid {
+    grid-template-columns: 1fr;
+  }
+
   .memory-panel {
     display: none;
   }
@@ -352,6 +457,10 @@ summary {
     grid-template-columns: 1fr;
     height: auto;
     min-height: 100vh;
+  }
+
+  .memory-shell {
+    grid-template-columns: 1fr;
   }
 
   .sidebar {
