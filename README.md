@@ -1,5 +1,9 @@
 # Memoe
 
+[![CI](https://github.com/mrmuli/memoe/actions/workflows/ci.yml/badge.svg)](https://github.com/mrmuli/memoe/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Status: Hackathon Prototype](https://img.shields.io/badge/status-hackathon%20prototype-blue)
+
 Operational memory for SRE intelligence.
 
 ## Local Demo
