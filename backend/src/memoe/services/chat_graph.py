@@ -1,0 +1,209 @@
+"""LangGraph orchestration for Memoe conversation."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict
+
+import boto3
+from langgraph.graph import END, START, StateGraph
+
+from memoe.config import Settings
+from memoe.providers.bedrock import response_text
+from memoe.services.memory_embeddings import (
+    MemorySearchResult,
+    refresh_memory_embeddings,
+    search_memory,
+)
+from memoe.services.reflection_runner import ReflectionRunResult, run_reflection
+
+
+class ChatGraphState(TypedDict, total=False):
+    """State passed between Memoe chat graph nodes."""
+
+    message: str
+    provider: str
+    service_scope: str | None
+    limit: int
+    reflect: bool
+    retrieved_memory: list[dict[str, Any]]
+    reflection: dict[str, Any] | None
+    answer: str
+
+
+@dataclass(frozen=True)
+class ChatGraphResult:
+    """Result returned from a Memoe chat graph run."""
+
+    answer: str
+    retrieved_memory: list[dict[str, Any]]
+    reflection: dict[str, Any] | None
+
+
+def run_chat_graph(
+    message: str,
+    provider: str = "bedrock",
+    service_scope: str | None = None,
+    limit: int = 8,
+    reflect: bool = False,
+    settings: Settings | None = None,
+) -> ChatGraphResult:
+    """Run a Memoe conversation turn through LangGraph."""
+    graph = build_chat_graph(settings or Settings())
+    result = graph.invoke(
+        {
+            "message": message,
+            "provider": provider,
+            "service_scope": service_scope,
+            "limit": limit,
+            "reflect": reflect,
+        }
+    )
+    return ChatGraphResult(
+        answer=str(result["answer"]),
+        retrieved_memory=list(result.get("retrieved_memory", [])),
+        reflection=result.get("reflection"),
+    )
+
+
+def build_chat_graph(settings: Settings):
+    """Build the Memoe chat graph."""
+
+    def retrieve_memory(state: ChatGraphState) -> dict[str, Any]:
+        results = search_memory(
+            goal=state["message"],
+            service_scope=state.get("service_scope"),
+            limit=int(state.get("limit", 8)),
+            settings=settings,
+        )
+        return {"retrieved_memory": [memory_result_to_dict(row) for row in results]}
+
+    def maybe_reflect(state: ChatGraphState) -> dict[str, Any]:
+        reflection = run_reflection(
+            provider_name=state.get("provider", "bedrock"),
+            limit=int(state.get("limit", 8)),
+            goal=state["message"],
+            service_scope=state.get("service_scope"),
+            settings=settings,
+        )
+        refresh_memory_embeddings(settings)
+        return {"reflection": reflection_result_to_dict(reflection)}
+
+    def answer_with_memory(state: ChatGraphState) -> dict[str, Any]:
+        answer = generate_answer_with_bedrock(state, settings)
+        return {"answer": answer}
+
+    def route_after_retrieval(state: ChatGraphState) -> Literal["reflect", "answer"]:
+        if state.get("reflect"):
+            return "reflect"
+        return "answer"
+
+    builder = StateGraph(ChatGraphState)
+    builder.add_node("retrieve_memory", retrieve_memory)
+    builder.add_node("reflect", maybe_reflect)
+    builder.add_node("answer", answer_with_memory)
+    builder.add_edge(START, "retrieve_memory")
+    builder.add_conditional_edges(
+        "retrieve_memory",
+        route_after_retrieval,
+        {"reflect": "reflect", "answer": "answer"},
+    )
+    builder.add_edge("reflect", "answer")
+    builder.add_edge("answer", END)
+    return builder.compile()
+
+
+def generate_answer_with_bedrock(state: ChatGraphState, settings: Settings) -> str:
+    """Answer a user question using retrieved Memoe memory."""
+    if not settings.aws_region:
+        raise ValueError("AWS_REGION is required for Memoe chat.")
+    if not settings.bedrock_model_id:
+        raise ValueError("BEDROCK_MODEL_ID is required for Memoe chat.")
+
+    client = bedrock_runtime_client(settings)
+    response = client.converse(
+        modelId=str(settings.bedrock_model_id),
+        system=[{"text": chat_system_prompt()}],
+        messages=[
+            {
+                "role": "user",
+                "content": [{"text": chat_user_prompt(state)}],
+            }
+        ],
+        inferenceConfig={
+            "maxTokens": settings.bedrock_max_tokens,
+            "temperature": settings.bedrock_temperature,
+        },
+    )
+    return response_text(response)
+
+
+def chat_system_prompt() -> str:
+    """Build the stable Memoe chat instruction."""
+    return """You are Memoe, an operational memory assistant for SREs.
+
+Answer only from the supplied Memoe memory. Do not invent facts.
+Separate what is known from what is uncertain.
+Treat retrieved observations and reflections as memory claims with evidence quality, not absolute truth.
+Use cautious language such as "Memoe has evidence that", "the stored memory suggests", or "this needs validation".
+Do not say "caused" unless the supplied memory explicitly proves causality.
+Prefer concise operational guidance over long summaries.
+Do not use Markdown tables.
+When useful, cite memory IDs from the retrieved memory or generated reflection.
+If evidence is weak, say what evidence is missing."""
+
+
+def chat_user_prompt(state: ChatGraphState) -> str:
+    """Build the user prompt for a Memoe chat turn."""
+    payload = {
+        "question": state["message"],
+        "service_scope": state.get("service_scope"),
+        "retrieved_memory": state.get("retrieved_memory", []),
+        "generated_reflection": state.get("reflection"),
+    }
+    return f"""Answer the user question using this Memoe context.
+
+Context:
+{json.dumps(payload, indent=2, default=str)}
+"""
+
+
+def bedrock_runtime_client(settings: Settings):
+    """Create a Bedrock Runtime client from the local AWS environment."""
+    session_kwargs: dict[str, str] = {"region_name": str(settings.aws_region)}
+    if settings.aws_profile:
+        session_kwargs["profile_name"] = settings.aws_profile
+
+    session = boto3.Session(**session_kwargs)
+    return session.client("bedrock-runtime")
+
+
+def memory_result_to_dict(row: MemorySearchResult) -> dict[str, Any]:
+    """Convert a memory search result into graph state."""
+    return {
+        "memory_type": row.memory_type,
+        "memory_id": row.memory_id,
+        "hybrid_score": row.hybrid_score,
+        "vector_similarity": row.vector_similarity,
+        "service_slug": row.service_slug,
+        "lifecycle_status": row.lifecycle_status,
+        "evidence_quality_rating": row.evidence_quality_rating,
+        "created_at": row.created_at,
+        "text": row.text,
+    }
+
+
+def reflection_result_to_dict(result: ReflectionRunResult) -> dict[str, Any]:
+    """Convert a persisted reflection result into graph state."""
+    return {
+        "run_id": result.run_id,
+        "reflection_id": result.reflection_id,
+        "statement": result.statement,
+        "confidence": result.confidence,
+        "evidence_quality": result.evidence_quality,
+        "supporting_observation_ids": result.supporting_observation_ids,
+        "rejected_observation_ids": result.rejected_observation_ids,
+        "limitations": result.limitations,
+        "details": result.details,
+    }

@@ -14,6 +14,7 @@ observations_app = typer.Typer(help="Run and inspect observation generation.")
 reflections_app = typer.Typer(help="Run and inspect reflection generation.")
 validations_app = typer.Typer(help="Record and inspect validation results.")
 memory_app = typer.Typer(help="Embed and search stored memory.")
+chat_app = typer.Typer(help="Converse with Memoe memory.")
 
 app.add_typer(database_app, name="database")
 app.add_typer(seed_app, name="seed")
@@ -22,6 +23,7 @@ app.add_typer(observations_app, name="observations")
 app.add_typer(reflections_app, name="reflections")
 app.add_typer(validations_app, name="validations")
 app.add_typer(memory_app, name="memory")
+app.add_typer(chat_app, name="chat")
 
 
 @app.command()
@@ -420,4 +422,50 @@ def memory_search(
             f"{row.memory_id} | service={row.service_slug or '-'} | "
             f"lifecycle={row.lifecycle_status or '-'} | quality={row.evidence_quality_rating or '-'} | "
             f"{preview}"
+        )
+
+
+@chat_app.command("ask")
+def chat_ask(
+    message: Annotated[str, typer.Option(help="Question for Memoe.")],
+    provider: Annotated[
+        str,
+        typer.Option(help="Reasoning provider for optional reflection, e.g. bedrock."),
+    ] = "bedrock",
+    service: Annotated[
+        str | None,
+        typer.Option(help="Optional service scope, e.g. payments."),
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Maximum memory items to retrieve.")] = 8,
+    reflect: Annotated[
+        bool,
+        typer.Option(help="Ask Memoe to generate and store a reflection before answering."),
+    ] = False,
+) -> None:
+    """Ask Memoe a question through the LangGraph chat flow."""
+    from memoe.services.chat_graph import run_chat_graph
+
+    try:
+        result = run_chat_graph(
+            message=message,
+            provider=provider,
+            service_scope=service,
+            limit=limit,
+            reflect=reflect,
+            settings=Settings(),
+        )
+    except Exception as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    typer.echo(result.answer)
+    if result.reflection:
+        typer.echo("")
+        typer.echo(f"Reflection stored: {result.reflection['reflection_id']}")
+    typer.echo("")
+    typer.echo("Retrieved memory:")
+    for row in result.retrieved_memory:
+        typer.echo(
+            f"- {row['hybrid_score']} | vector={row['vector_similarity']} | "
+            f"{row['memory_type']} | {row['memory_id']}"
         )
