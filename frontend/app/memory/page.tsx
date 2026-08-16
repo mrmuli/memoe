@@ -18,6 +18,9 @@ type Observation = {
   evidence_quality_rating: string;
   lifecycle_status: string;
   statement: string;
+  occurrence_count?: number;
+  first_seen_at?: string;
+  last_seen_at?: string;
 };
 
 type Reflection = {
@@ -189,8 +192,10 @@ export default function MemoryPage() {
                   <MemoryCard
                     key={observation.id}
                     title={observation.observation_type}
-                    label={`${observation.service_slug} · ${observation.evidence_quality_rating} · ${formatDate(
-                      observation.created_at,
+                    label={`${observation.service_slug} · ${
+                      observation.evidence_quality_rating
+                    } · seen ${observation.occurrence_count ?? 1}x · ${formatDate(
+                      observation.last_seen_at ?? observation.created_at,
                     )}`}
                     confidence={observation.confidence}
                     statement={observation.statement}

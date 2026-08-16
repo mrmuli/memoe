@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,6 +63,9 @@ class ObservationSummary:
     evidence_quality_rating: str
     lifecycle_status: str
     statement: str
+    occurrence_count: int
+    first_seen_at: str
+    last_seen_at: str
 
 
 def run_observation(
@@ -113,6 +118,7 @@ def run_observation(
                 connection=connection,
                 run_id=run_id,
                 service_id=service["id"],
+                service_slug=str(service["slug"]),
                 procedure_id=procedure["id"],
                 result=result,
                 evidence=evidence,
@@ -276,11 +282,18 @@ def persist_observation_result(
     connection,
     run_id: str,
     service_id: str,
+    service_slug: str,
     procedure_id: str,
     result: ObservationResult,
     evidence: list[dict[str, Any]],
 ) -> str:
     """Persist a successful observation and evidence links."""
+    signature = observation_signature(
+        service_slug=service_slug,
+        observation_type=result.observation_type,
+        statement=result.statement,
+        supporting_ids=result.supporting_evidence_ids,
+    )
     observation_row = connection.execute(
         """
         INSERT INTO observations (
@@ -293,9 +306,23 @@ def persist_observation_result(
           evidence_quality,
           details,
           limitations,
-          reasoning_summary
+          reasoning_summary,
+          signature,
+          occurrence_count,
+          first_seen_at,
+          last_seen_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, now(), now())
+        ON CONFLICT (signature)
+        DO UPDATE SET
+          occurrence_count = observations.occurrence_count + 1,
+          last_seen_at = now(),
+          confidence = greatest(observations.confidence, excluded.confidence),
+          evidence_quality = excluded.evidence_quality,
+          details = excluded.details,
+          limitations = excluded.limitations,
+          reasoning_summary = excluded.reasoning_summary,
+          lifecycle_status = 'fresh'
         RETURNING id
         """,
         (
@@ -309,6 +336,7 @@ def persist_observation_result(
             Jsonb(result.extra_fields),
             Jsonb(result.limitations),
             result.reasoning_summary,
+            signature,
         ),
     ).fetchone()
     observation_id = str(observation_row[0])
@@ -331,6 +359,20 @@ def persist_observation_result(
         insert_observation_evidence(connection, run_id, observation_id, event_id, "rejected")
 
     return observation_id
+
+
+def observation_signature(
+    service_slug: str,
+    observation_type: str,
+    statement: str,
+    supporting_ids: list[str],
+) -> str:
+    """Build a stable signature for deduplicating repeated observations."""
+    evidence_key = " ".join(sorted(supporting_ids))
+    signature_source = f"{service_slug} {observation_type} {evidence_key or statement}"
+    normalized = re.sub(r"[^a-z0-9]+", " ", signature_source.lower())
+    compact = " ".join(normalized.split())
+    return hashlib.sha256(compact.encode("utf-8")).hexdigest()
 
 
 def insert_observation_evidence(
@@ -455,7 +497,11 @@ def list_observations(
           o.confidence,
           COALESCE(o.evidence_quality->>'rating', 'unknown') AS evidence_quality_rating,
           o.lifecycle_status,
-          o.statement
+          o.statement,
+          o.signature,
+          o.occurrence_count,
+          o.first_seen_at,
+          o.last_seen_at
         FROM observations o
         JOIN services s ON s.id = o.service_id
         JOIN observation_runs r ON r.id = o.observation_run_id
@@ -465,24 +511,69 @@ def list_observations(
         query += " WHERE s.slug = %s"
         params.append(service_slug)
 
-    query += " ORDER BY o.created_at DESC LIMIT %s"
-    params.append(limit)
+    query += " ORDER BY o.last_seen_at DESC LIMIT %s"
+    params.append(limit * 3)
 
     with connect(resolved_settings) as connection, connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(query, params)
         rows = cursor.fetchall()
-
-    return [
-        ObservationSummary(
-            id=str(row["id"]),
-            service_slug=str(row["service_slug"]),
-            created_at=row["created_at"].isoformat(),
-            model_id=str(row["model_id"]),
-            observation_type=str(row["observation_type"]),
-            confidence=float(row["confidence"]),
-            evidence_quality_rating=str(row["evidence_quality_rating"]),
-            lifecycle_status=str(row["lifecycle_status"]),
-            statement=str(row["statement"]),
+        supporting_ids_by_observation = fetch_supporting_event_ids(
+            cursor,
+            [str(row["id"]) for row in rows if not row["signature"]],
         )
-        for row in rows
-    ]
+
+    summaries: list[ObservationSummary] = []
+    seen_signatures: set[str] = set()
+    for row in rows:
+        signature = row["signature"] or observation_signature(
+            service_slug=str(row["service_slug"]),
+            observation_type=str(row["observation_type"]),
+            statement=str(row["statement"]),
+            supporting_ids=supporting_ids_by_observation.get(str(row["id"]), []),
+        )
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        summaries.append(
+            ObservationSummary(
+                id=str(row["id"]),
+                service_slug=str(row["service_slug"]),
+                created_at=row["created_at"].isoformat(),
+                model_id=str(row["model_id"]),
+                observation_type=str(row["observation_type"]),
+                confidence=float(row["confidence"]),
+                evidence_quality_rating=str(row["evidence_quality_rating"]),
+                lifecycle_status=str(row["lifecycle_status"]),
+                statement=str(row["statement"]),
+                occurrence_count=int(row["occurrence_count"]),
+                first_seen_at=row["first_seen_at"].isoformat(),
+                last_seen_at=row["last_seen_at"].isoformat(),
+            )
+        )
+        if len(summaries) >= limit:
+            break
+
+    return summaries
+
+
+def fetch_supporting_event_ids(cursor, observation_ids: list[str]) -> dict[str, list[str]]:
+    """Fetch supporting event IDs for legacy observations that do not have signatures."""
+    if not observation_ids:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(observation_ids))
+    cursor.execute(
+        f"""
+        SELECT observation_id, event_id
+        FROM observation_evidence
+        WHERE role = 'supporting'
+          AND observation_id IN ({placeholders})
+        ORDER BY event_id
+        """,
+        observation_ids,
+    )
+    supporting_ids_by_observation: dict[str, list[str]] = {}
+    for row in cursor.fetchall():
+        observation_id = str(row["observation_id"])
+        supporting_ids_by_observation.setdefault(observation_id, []).append(str(row["event_id"]))
+    return supporting_ids_by_observation

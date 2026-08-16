@@ -112,6 +112,10 @@ CREATE TABLE IF NOT EXISTS observations (
   stale_after TIMESTAMPTZ NULL,
   last_checked_at TIMESTAMPTZ NULL,
   superseded_by_observation_id UUID NULL REFERENCES observations(id),
+  signature STRING NULL,
+  occurrence_count INT NOT NULL DEFAULT 1,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT observations_confidence_check CHECK (confidence >= 0 AND confidence <= 1),
   CONSTRAINT observations_lifecycle_status_check CHECK (
@@ -156,6 +160,14 @@ ALTER TABLE observations ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ NU
 
 ALTER TABLE observations ADD COLUMN IF NOT EXISTS superseded_by_observation_id UUID NULL REFERENCES observations(id);
 
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS signature STRING NULL;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS occurrence_count INT NOT NULL DEFAULT 1;
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 ALTER TABLE observations DROP CONSTRAINT IF EXISTS observations_lifecycle_status_check;
 
 ALTER TABLE observations ADD CONSTRAINT observations_lifecycle_status_check CHECK (
@@ -180,6 +192,9 @@ CREATE TABLE IF NOT EXISTS observation_evidence (
   UNIQUE (observation_run_id, event_id, role),
   CONSTRAINT observation_evidence_role_check CHECK (role IN ('considered', 'supporting', 'rejected'))
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS observations_signature_idx
+  ON observations (signature);
 
 CREATE TABLE IF NOT EXISTS reflection_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
