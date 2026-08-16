@@ -208,16 +208,35 @@ CREATE TABLE IF NOT EXISTS reflections (
   evidence_quality JSONB NOT NULL DEFAULT '{}'::JSONB,
   limitations JSONB NOT NULL DEFAULT '[]'::JSONB,
   reasoning_summary STRING NOT NULL,
+  signature STRING NULL,
+  occurrence_count INT NOT NULL DEFAULT 1,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT reflections_confidence_check CHECK (confidence >= 0 AND confidence <= 1)
 );
 
 ALTER TABLE reflections ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::JSONB;
 
+ALTER TABLE reflections ADD COLUMN IF NOT EXISTS signature STRING NULL;
+
+ALTER TABLE reflections ADD COLUMN IF NOT EXISTS occurrence_count INT NOT NULL DEFAULT 1;
+
+ALTER TABLE reflections ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE reflections ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 ALTER TABLE reflections DROP CONSTRAINT IF EXISTS reflections_type_check;
 
 CREATE INDEX IF NOT EXISTS reflections_created_at_idx
   ON reflections (created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS reflections_signature_idx
+  ON reflections (signature)
+  WHERE signature IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS reflections_signature_unique_idx
+  ON reflections (signature);
 
 CREATE TABLE IF NOT EXISTS reflection_observations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -231,6 +250,25 @@ CREATE TABLE IF NOT EXISTS reflection_observations (
   CONSTRAINT reflection_observations_role_check
     CHECK (role IN ('considered', 'supporting', 'rejected'))
 );
+
+CREATE TABLE IF NOT EXISTS reflection_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status STRING NOT NULL DEFAULT 'queued',
+  stage STRING NOT NULL DEFAULT 'queued',
+  request_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+  reflection_run_id UUID NULL REFERENCES reflection_runs(id),
+  reflection_id UUID NULL REFERENCES reflections(id),
+  error_message STRING NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ NULL,
+  CONSTRAINT reflection_jobs_status_check CHECK (
+    status IN ('queued', 'running', 'embedding', 'completed', 'failed')
+  )
+);
+
+CREATE INDEX IF NOT EXISTS reflection_jobs_updated_at_idx
+  ON reflection_jobs (updated_at);
 
 CREATE TABLE IF NOT EXISTS validation_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

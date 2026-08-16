@@ -26,11 +26,24 @@ type Reflection = {
   confidence: number;
   evidence_quality_rating: string;
   statement: string;
+  occurrence_count?: number;
+  first_seen_at?: string;
+  last_seen_at?: string;
+};
+
+type ReflectionJob = {
+  id: string;
+  status: "queued" | "running" | "embedding" | "completed" | "failed";
+  stage: string;
+  reflection_id: string | null;
+  error_message: string | null;
+  updated_at: string;
 };
 
 export default function MemoryPage() {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [reflectionJob, setReflectionJob] = useState<ReflectionJob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +66,33 @@ export default function MemoryPage() {
 
   useEffect(() => {
     loadMemory();
+    loadLatestReflectionJob();
   }, []);
+
+  useEffect(() => {
+    if (!reflectionJob || !isActiveReflectionJob(reflectionJob)) return;
+
+    const timer = window.setInterval(() => {
+      api<ReflectionJob>(`/reflections/jobs/${reflectionJob.id}`)
+        .then((job) => {
+          setReflectionJob(job);
+          if (job.status === "completed") {
+            loadMemory();
+          }
+        })
+        .catch((err: Error) => setError(err.message));
+    }, 1800);
+
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reflectionJob?.id, reflectionJob?.status]);
+
+  async function loadLatestReflectionJob() {
+    const job = await api<ReflectionJob | null>("/reflections/jobs/latest");
+    if (job && isActiveReflectionJob(job)) {
+      setReflectionJob(job);
+    }
+  }
 
   return (
     <main className="memory-shell">
@@ -98,6 +137,16 @@ export default function MemoryPage() {
 
         {error && <div className="error">{error}</div>}
 
+        {reflectionJob && (
+          <div className={`latest-memory ${reflectionJob.status === "failed" ? "error-memory" : ""}`}>
+            <div>
+              <strong>{reflectionJobTitle(reflectionJob)}</strong>
+              <span>{new Date(reflectionJob.updated_at).toLocaleTimeString()}</span>
+            </div>
+            <p>{reflectionJobMessage(reflectionJob)}</p>
+          </div>
+        )}
+
         <div className="memory-grid">
           <section className="memory-section">
             <div className="section-heading">
@@ -109,7 +158,9 @@ export default function MemoryPage() {
                 <MemoryCard
                   key={reflection.id}
                   title={reflection.reflection_type}
-                  label={`${reflection.evidence_quality_rating} · ${formatDate(reflection.created_at)}`}
+                  label={`${reflection.evidence_quality_rating} · seen ${
+                    reflection.occurrence_count ?? 1
+                  }x · ${formatDate(reflection.last_seen_at ?? reflection.created_at)}`}
                   confidence={reflection.confidence}
                   statement={reflection.statement}
                 />
@@ -167,6 +218,26 @@ function MemoryCard({
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
+}
+
+function isActiveReflectionJob(job: ReflectionJob) {
+  return job.status === "queued" || job.status === "running" || job.status === "embedding";
+}
+
+function reflectionJobTitle(job: ReflectionJob) {
+  if (job.status === "queued") return "Reflection queued";
+  if (job.status === "running") return "Memoe is reflecting";
+  if (job.status === "embedding") return "Updating memory search";
+  if (job.status === "completed") return "New reflection stored";
+  return "Reflection failed";
+}
+
+function reflectionJobMessage(job: ReflectionJob) {
+  if (job.status === "queued") return "Memoe is waiting to start the reflection.";
+  if (job.status === "running") return "Memoe is reviewing observations, prior reflections, and retrieved memory.";
+  if (job.status === "embedding") return "The reflection is stored; Memoe is refreshing embeddings so chat can use it.";
+  if (job.status === "completed") return "Reflection is complete and available to chat.";
+  return job.error_message ?? "Reflection failed.";
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

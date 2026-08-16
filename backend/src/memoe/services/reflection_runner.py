@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,6 +46,9 @@ class ReflectionSummary:
     confidence: float
     evidence_quality_rating: str
     statement: str
+    occurrence_count: int
+    first_seen_at: str
+    last_seen_at: str
 
 
 def run_reflection(
@@ -651,6 +656,11 @@ def persist_reflection_result(
     observations: list[dict[str, Any]],
 ) -> str:
     """Persist a successful reflection and observation links."""
+    signature = reflection_signature(
+        reflection_type=result.observation_type,
+        statement=result.statement,
+        supporting_ids=result.supporting_evidence_ids,
+    )
     reflection_row = connection.execute(
         """
         INSERT INTO reflections (
@@ -662,9 +672,18 @@ def persist_reflection_result(
           evidence_quality,
           details,
           limitations,
-          reasoning_summary
+          reasoning_summary,
+          signature,
+          occurrence_count,
+          first_seen_at,
+          last_seen_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, now(), now())
+        ON CONFLICT (signature)
+        DO UPDATE SET
+          occurrence_count = reflections.occurrence_count + 1,
+          last_seen_at = now(),
+          confidence = greatest(reflections.confidence, excluded.confidence)
         RETURNING id
         """,
         (
@@ -677,6 +696,7 @@ def persist_reflection_result(
             Jsonb(result.extra_fields),
             Jsonb(result.limitations),
             result.reasoning_summary,
+            signature,
         ),
     ).fetchone()
     reflection_id = str(reflection_row[0])
@@ -701,6 +721,19 @@ def persist_reflection_result(
             insert_reflection_observation(connection, run_id, reflection_id, observation_id, "rejected")
 
     return reflection_id
+
+
+def reflection_signature(
+    reflection_type: str,
+    statement: str,
+    supporting_ids: list[str],
+) -> str:
+    """Build a stable signature for deduplicating semantically repeated reflections."""
+    evidence_key = " ".join(sorted(supporting_ids))
+    signature_source = f"{reflection_type} {evidence_key or statement}"
+    normalized = re.sub(r"[^a-z0-9]+", " ", signature_source.lower())
+    compact = " ".join(normalized.split())
+    return hashlib.sha256(compact.encode("utf-8")).hexdigest()
 
 
 def insert_reflection_observation(
@@ -755,25 +788,46 @@ def list_reflections(
               f.reflection_type,
               f.confidence,
               COALESCE(f.evidence_quality->>'rating', 'unknown') AS evidence_quality_rating,
-              f.statement
+              f.statement,
+              f.signature,
+              f.occurrence_count,
+              f.first_seen_at,
+              f.last_seen_at
             FROM reflections f
             JOIN reflection_runs r ON r.id = f.reflection_run_id
-            ORDER BY f.created_at DESC
+            ORDER BY f.last_seen_at DESC
             LIMIT %s
             """,
-            (limit,),
+            (limit * 3,),
         )
         rows = cursor.fetchall()
 
-    return [
-        ReflectionSummary(
-            id=str(row["id"]),
-            created_at=row["created_at"].isoformat(),
-            model_id=str(row["model_id"]),
+    summaries: list[ReflectionSummary] = []
+    seen_signatures: set[str] = set()
+    for row in rows:
+        signature = row["signature"] or reflection_signature(
             reflection_type=str(row["reflection_type"]),
-            confidence=float(row["confidence"]),
-            evidence_quality_rating=str(row["evidence_quality_rating"]),
             statement=str(row["statement"]),
+            supporting_ids=[],
         )
-        for row in rows
-    ]
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        summaries.append(
+            ReflectionSummary(
+                id=str(row["id"]),
+                created_at=row["created_at"].isoformat(),
+                model_id=str(row["model_id"]),
+                reflection_type=str(row["reflection_type"]),
+                confidence=float(row["confidence"]),
+                evidence_quality_rating=str(row["evidence_quality_rating"]),
+                statement=str(row["statement"]),
+                occurrence_count=int(row["occurrence_count"]),
+                first_seen_at=row["first_seen_at"].isoformat(),
+                last_seen_at=row["last_seen_at"].isoformat(),
+            )
+        )
+        if len(summaries) >= limit:
+            break
+
+    return summaries

@@ -31,9 +31,27 @@ type Reflection = {
   confidence: number;
   evidence_quality_rating: string;
   statement: string;
+  occurrence_count?: number;
+  first_seen_at?: string;
+  last_seen_at?: string;
 };
 
-type ReflectionRunResponse = {
+type ReflectionJob = {
+  id: string;
+  status: "queued" | "running" | "embedding" | "completed" | "failed";
+  stage: string;
+  request_payload: {
+    goal?: string | null;
+    service_scope?: string | null;
+  };
+  reflection_id: string | null;
+  error_message: string | null;
+  updated_at: string;
+};
+
+type ReflectionRunResponse = ReflectionJob;
+
+type LatestReflection = {
   reflection_id: string;
   statement: string;
   confidence: number;
@@ -85,7 +103,8 @@ export default function Home() {
   const [services, setServices] = useState<Service[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [selectedService, setSelectedService] = useState<string>("");
-  const [latestReflection, setLatestReflection] = useState<ReflectionRunResponse | null>(null);
+  const [reflectionJob, setReflectionJob] = useState<ReflectionJob | null>(null);
+  const [latestReflection, setLatestReflection] = useState<LatestReflection | null>(null);
   const [session, setSession] = useState<ChatSession | null>(null);
   const [message, setMessage] = useState("");
   const [reflect, setReflect] = useState(false);
@@ -111,9 +130,29 @@ export default function Home() {
   }
 
   useEffect(() => {
-    Promise.all([loadData(), loadLatestSession()]).catch((err: Error) => setError(err.message));
+    Promise.all([loadData(), loadLatestSession(), loadLatestReflectionJob()]).catch((err: Error) =>
+      setError(err.message),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!reflectionJob || !isActiveReflectionJob(reflectionJob)) return;
+
+    const timer = window.setInterval(() => {
+      api<ReflectionJob>(`/reflections/jobs/${reflectionJob.id}`)
+        .then((job) => {
+          setReflectionJob(job);
+          if (job.status === "completed") {
+            loadData();
+          }
+        })
+        .catch((err: Error) => setError(err.message));
+    }, 1800);
+
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reflectionJob?.id, reflectionJob?.status]);
 
   const newestReflection = useMemo(() => reflections[0] ?? null, [reflections]);
 
@@ -207,12 +246,20 @@ export default function Home() {
           limit: 8,
         }),
       });
-      setLatestReflection(result);
+      setReflectionJob(result);
+      setLatestReflection(null);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reflection run failed");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function loadLatestReflectionJob() {
+    const job = await api<ReflectionJob | null>("/reflections/jobs/latest");
+    if (job && isActiveReflectionJob(job)) {
+      setReflectionJob(job);
     }
   }
 
@@ -327,7 +374,17 @@ export default function Home() {
 
         {error && <div className="error">{error}</div>}
 
-        {latestReflection && (
+        {reflectionJob && (
+          <div className={`latest-memory ${reflectionJob.status === "failed" ? "error-memory" : ""}`}>
+            <div>
+              <strong>{reflectionJobTitle(reflectionJob)}</strong>
+              <span>{new Date(reflectionJob.updated_at).toLocaleTimeString()}</span>
+            </div>
+            <p>{reflectionJobMessage(reflectionJob)}</p>
+          </div>
+        )}
+
+        {!reflectionJob && latestReflection && (
           <div className="latest-memory">
             <div>
               <strong>New reflection stored</strong>
@@ -340,7 +397,7 @@ export default function Home() {
           </div>
         )}
 
-        {!latestReflection && newestReflection && (
+        {!reflectionJob && !latestReflection && newestReflection && (
           <div className="latest-memory muted-memory">
             <div>
               <strong>Latest reflection</strong>
@@ -407,6 +464,26 @@ function messageFromSession(row: PersistedChatMessage): ChatMessage {
     retrievedMemory: row.retrieved_memory,
     reflectionId: row.reflection_id ?? undefined,
   };
+}
+
+function isActiveReflectionJob(job: ReflectionJob) {
+  return job.status === "queued" || job.status === "running" || job.status === "embedding";
+}
+
+function reflectionJobTitle(job: ReflectionJob) {
+  if (job.status === "queued") return "Reflection queued";
+  if (job.status === "running") return "Memoe is reflecting";
+  if (job.status === "embedding") return "Updating memory search";
+  if (job.status === "completed") return "New reflection stored";
+  return "Reflection failed";
+}
+
+function reflectionJobMessage(job: ReflectionJob) {
+  if (job.status === "queued") return "Memoe is waiting to start the reflection.";
+  if (job.status === "running") return "Memoe is reviewing observations, prior reflections, and retrieved memory.";
+  if (job.status === "embedding") return "The reflection is stored; Memoe is refreshing embeddings so chat can use it.";
+  if (job.status === "completed") return "Reflection is complete and available to chat.";
+  return job.error_message ?? "Reflection failed.";
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

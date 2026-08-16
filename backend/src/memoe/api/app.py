@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
@@ -22,7 +22,13 @@ from memoe.services.chat_sessions import (
 )
 from memoe.services.memory_embeddings import refresh_memory_embeddings
 from memoe.services.observation_runner import list_observations, run_observation
-from memoe.services.reflection_runner import list_reflections, run_reflection
+from memoe.services.reflection_jobs import (
+    create_reflection_job,
+    get_reflection_job,
+    latest_reflection_job,
+    run_reflection_job,
+)
+from memoe.services.reflection_runner import list_reflections
 
 app = FastAPI(title="Memoe API", version="0.1.0")
 
@@ -169,21 +175,44 @@ def run_observation_endpoint(request: ObservationRunRequest) -> dict[str, Any]:
 
 
 @app.post("/reflections/run")
-def run_reflection_endpoint(request: ReflectionRunRequest) -> dict[str, Any]:
-    """Run goal-scoped reflection generation."""
+def run_reflection_endpoint(
+    request: ReflectionRunRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
+    """Queue goal-scoped reflection generation."""
     try:
-        result = run_reflection(
-            provider_name=request.provider,
+        job = create_reflection_job(
+            provider=request.provider,
             limit=request.limit,
             goal=request.goal,
             service_scope=request.service_scope,
             settings=Settings(),
         )
-        refresh_memory_embeddings(Settings())
+        background_tasks.add_task(run_reflection_job, job.id, Settings())
     except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    return asdict(result)
+    return asdict(job)
+
+
+@app.get("/reflections/jobs/latest")
+def latest_reflection_job_endpoint() -> dict[str, Any] | None:
+    """Return the latest reflection job."""
+    try:
+        job = latest_reflection_job(Settings())
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return asdict(job) if job else None
+
+
+@app.get("/reflections/jobs/{job_id}")
+def reflection_job_endpoint(job_id: str) -> dict[str, Any]:
+    """Return one reflection job."""
+    try:
+        job = get_reflection_job(job_id, Settings())
+    except Exception as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return asdict(job)
 
 
 @app.post("/chat")
