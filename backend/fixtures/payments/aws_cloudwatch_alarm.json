@@ -1,0 +1,78 @@
+[
+  {
+    "name": "payments-latency-burn-rate-high",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:payments-latency-burn-rate-high",
+    "state_value": "ALARM",
+    "state_reason": "p95 latency burn rate exceeded 14x over the 5m window and 6x over the 1h window for Payments checkout requests.",
+    "metric_name": "latency_burn_rate",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 6,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {
+        "Name": "Service",
+        "Value": "payments"
+      },
+      {
+        "Name": "Environment",
+        "Value": "production"
+      },
+      {
+        "Name": "Objective",
+        "Value": "checkout_latency"
+      }
+    ],
+    "alarm_actions": [
+      "arn:aws:sns:eu-west-1:123456789012:payments-reliability-alerts"
+    ],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T10:11:00Z",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout-latency-slo",
+      "environment": "production"
+    }
+  },
+  {
+    "name": "notifications-delivery-delay-warning",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:notifications-delivery-delay-warning",
+    "state_value": "ALARM",
+    "state_reason": "Notification delivery delay exceeded warning threshold for the Notifications service.",
+    "metric_name": "delivery_delay_seconds",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 30,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {
+        "Name": "Service",
+        "Value": "notifications"
+      },
+      {
+        "Name": "Environment",
+        "Value": "production"
+      },
+      {
+        "Name": "Objective",
+        "Value": "notification_delivery_latency"
+      }
+    ],
+    "alarm_actions": [
+      "arn:aws:sns:eu-west-1:123456789012:notifications-reliability-alerts"
+    ],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T10:18:00Z",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "delivery-latency-slo",
+      "environment": "production"
+    }
+  }
+]

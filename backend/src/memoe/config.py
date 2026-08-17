@@ -1,0 +1,42 @@
+"""Runtime configuration for Memoe."""
+
+from pathlib import Path
+
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[3]
+REPO_ROOT = BACKEND_DIR.parent
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=(REPO_ROOT / ".env", BACKEND_DIR / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    database_url: str = "postgresql://root@localhost:26257/memoe?sslmode=disable"
+    observation_provider: str = "ollama"
+
+    ollama_base_url: str | None = "https://ollama.com"
+    ollama_api_key: SecretStr | None = None
+    ollama_model: str | None = "gpt-oss:20b"
+
+    aws_region: str | None = None
+    aws_profile: str | None = None
+    bedrock_model_id: str | None = None
+    bedrock_max_tokens: int = 4096
+    bedrock_temperature: float = 0
+
+    bedrock_embedding_model_id: str = "amazon.titan-embed-text-v2:0"
+    bedrock_embedding_dimensions: int = 256
+    bedrock_embedding_normalize: bool = True
+
+    embedding_provider: str = "bedrock"
+    tei_base_url: str = "http://localhost:8081"
+    tei_model_id: str = "BAAI/bge-small-en-v1.5"
+    tei_embedding_dimensions: int = 384
+    tei_query_instruction: str = "Represent this sentence for searching relevant passages: "
