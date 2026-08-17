@@ -11,8 +11,10 @@ Operational memory for SRE intelligence.
 Start the full Docker Compose demo stack:
 
 ```bash
-docker compose up -d cockroach backend frontend
+docker compose up -d
 ```
+
+The backend initializes the CockroachDB schema and loads the demo fixture scenario on startup.
 
 Open:
 
@@ -27,6 +29,12 @@ http://127.0.0.1:8000
 ```
 
 The backend container reads `.env` and mounts your local AWS config from `~/.aws` so Bedrock can use `AWS_PROFILE`. AWS SSO may write refreshed token cache files during a chat request.
+
+To refresh the seeded evidence manually:
+
+```bash
+docker compose exec backend uv run memoe seed load payments
+```
 
 Stop the stack:
 

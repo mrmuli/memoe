@@ -7,6 +7,7 @@ ENV UV_LINK_MODE=copy
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY fixtures ./fixtures
 
 RUN uv sync --no-dev
 
