@@ -21,6 +21,13 @@ def test_evidence_event_from_row_keeps_temporal_and_reference_fields() -> None:
         "summary": "Customers report checkout timeouts",
         "external_reference": "PAY-243",
         "correlation_identifiers": {"project_key": "PAY", "labels": ["customer-impact"]},
+        "metadata": {
+            "key": "PAY-243",
+            "priority": "High",
+            "status": "Investigating",
+            "description": "Customers report checkout timeouts after payment confirmation.",
+            "secret_unused_field": "not included",
+        },
         "role": "supporting",
     }
 
@@ -38,5 +45,11 @@ def test_evidence_event_from_row_keeps_temporal_and_reference_fields() -> None:
         "summary": "Customers report checkout timeouts",
         "external_reference": "PAY-243",
         "correlation_identifiers": {"project_key": "PAY", "labels": ["customer-impact"]},
+        "source_details": {
+            "key": "PAY-243",
+            "priority": "High",
+            "status": "Investigating",
+            "description": "Customers report checkout timeouts after payment confirmation.",
+        },
         "evidence_role": "supporting",
     }

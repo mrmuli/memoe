@@ -92,10 +92,11 @@ def build_chat_graph(settings: Settings):
 
     def expand_evidence_detail(state: ChatGraphState) -> dict[str, Any]:
         route = state.get("question_route", {})
-        if not route.get("needs_evidence_detail"):
+        if not route.get("needs_evidence_detail") and route.get("answer_mode") != "ticket_lookup":
             return {"evidence_detail": []}
         evidence = expand_evidence_for_memory(
             retrieved_memory=state.get("retrieved_memory", []),
+            answer_mode=route.get("answer_mode"),
             settings=settings,
         )
         return {"evidence_detail": evidence}

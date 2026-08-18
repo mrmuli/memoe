@@ -458,8 +458,9 @@ def insert_observation_evidence(
         """
         INSERT INTO observation_evidence (observation_run_id, observation_id, event_id, role)
         VALUES (%s, %s, %s, %s)
-        ON CONFLICT (observation_run_id, event_id, role)
-        DO NOTHING
+        ON CONFLICT (observation_id, event_id, role)
+        DO UPDATE SET
+          observation_run_id = excluded.observation_run_id
         """,
         (run_id, observation_id, event_id, role),
     )

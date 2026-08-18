@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS observation_evidence (
   reason STRING NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (observation_run_id, event_id, role),
+  UNIQUE (observation_id, event_id, role),
   CONSTRAINT observation_evidence_role_check CHECK (role IN ('considered', 'supporting', 'rejected'))
 );
 
