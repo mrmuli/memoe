@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import boto3
@@ -16,6 +17,8 @@ from memoe.providers.observations import (
     parse_json_content,
     validate_output_schema_required_fields,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class BedrockObservationProvider(ObservationProvider):
@@ -53,7 +56,15 @@ class BedrockObservationProvider(ObservationProvider):
     def _converse(self, request: ObservationRequest) -> dict[str, Any]:
         """Call Bedrock's model-agnostic Converse endpoint."""
         client = self._client()
-        return client.converse(
+        evidence_summary = summarize_request_evidence(request.evidence)
+        logger.info(
+            "bedrock.converse.request model_id=%s procedure=%s:%s evidence_summary=%s",
+            self.settings.bedrock_model_id,
+            request.procedure_name,
+            request.procedure_version,
+            evidence_summary,
+        )
+        response = client.converse(
             modelId=str(self.settings.bedrock_model_id),
             system=[{"text": build_system_prompt(request)}],
             messages=[
@@ -67,6 +78,13 @@ class BedrockObservationProvider(ObservationProvider):
                 "temperature": self.settings.bedrock_temperature,
             },
         )
+        logger.info(
+            "bedrock.converse.response model_id=%s stop_reason=%s output_chars=%s",
+            self.settings.bedrock_model_id,
+            response.get("stopReason", "unknown"),
+            len(response_text(response)),
+        )
+        return response
 
     def _client(self):
         """Create a Bedrock Runtime client from the local AWS environment."""
@@ -76,6 +94,31 @@ class BedrockObservationProvider(ObservationProvider):
 
         session = boto3.Session(**session_kwargs)
         return session.client("bedrock-runtime")
+
+
+def summarize_request_evidence(evidence: list[dict]) -> dict[str, Any]:
+    """Summarize evidence sent to Bedrock without logging raw event content."""
+    source_tables: dict[str, int] = {}
+    categories: dict[str, int] = {}
+    event_types: dict[str, int] = {}
+    for row in evidence:
+        increment(source_tables, row.get("source_table"))
+        increment(categories, row.get("category"))
+        increment(event_types, row.get("event_type"))
+
+    return {
+        "total": len(evidence),
+        "source_tables": source_tables,
+        "categories": categories,
+        "event_types": event_types,
+    }
+
+
+def increment(counter: dict[str, int], value: Any) -> None:
+    """Increment a string counter for non-empty values."""
+    if value:
+        key = str(value)
+        counter[key] = counter.get(key, 0) + 1
 
 
 def response_text(response: dict[str, Any]) -> str:

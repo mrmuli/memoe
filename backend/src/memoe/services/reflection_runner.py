@@ -42,7 +42,9 @@ class ReflectionSummary:
     id: str
     created_at: str
     model_id: str
+    title: str
     reflection_type: str
+    service_slugs: list[str]
     confidence: float
     evidence_quality_rating: str
     statement: str
@@ -801,10 +803,15 @@ def list_reflections(
             (limit * 3,),
         )
         rows = cursor.fetchall()
+        service_slugs_by_reflection = fetch_reflection_service_slugs(
+            cursor,
+            [str(row["id"]) for row in rows],
+        )
 
     summaries: list[ReflectionSummary] = []
     seen_signatures: set[str] = set()
     for row in rows:
+        service_slugs = service_slugs_by_reflection.get(str(row["id"]), [])
         signature = row["signature"] or reflection_signature(
             reflection_type=str(row["reflection_type"]),
             statement=str(row["statement"]),
@@ -818,7 +825,9 @@ def list_reflections(
                 id=str(row["id"]),
                 created_at=row["created_at"].isoformat(),
                 model_id=str(row["model_id"]),
+                title=reflection_title(str(row["reflection_type"]), service_slugs),
                 reflection_type=str(row["reflection_type"]),
+                service_slugs=service_slugs,
                 confidence=float(row["confidence"]),
                 evidence_quality_rating=str(row["evidence_quality_rating"]),
                 statement=str(row["statement"]),
@@ -831,3 +840,43 @@ def list_reflections(
             break
 
     return summaries
+
+
+def fetch_reflection_service_slugs(cursor, reflection_ids: list[str]) -> dict[str, list[str]]:
+    """Fetch supporting service slugs for reflection summaries."""
+    if not reflection_ids:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(reflection_ids))
+    cursor.execute(
+        f"""
+        SELECT DISTINCT ro.reflection_id, s.slug
+        FROM reflection_observations ro
+        JOIN observations o ON o.id = ro.observation_id
+        JOIN services s ON s.id = o.service_id
+        WHERE ro.reflection_id IN ({placeholders})
+          AND ro.role = 'supporting'
+        ORDER BY s.slug
+        """,
+        reflection_ids,
+    )
+
+    service_slugs_by_reflection: dict[str, list[str]] = {}
+    for row in cursor.fetchall():
+        reflection_id = str(row["reflection_id"])
+        service_slugs_by_reflection.setdefault(reflection_id, []).append(str(row["slug"]))
+    return service_slugs_by_reflection
+
+
+def reflection_title(reflection_type: str, service_slugs: list[str]) -> str:
+    """Build a readable reflection title from service scope and reflection type."""
+    unique_slugs = sorted(set(service_slugs))
+    if len(unique_slugs) == 1:
+        scope = f"{unique_slugs[0]} service"
+    elif 1 < len(unique_slugs) <= 3:
+        scope = " + ".join(unique_slugs)
+    elif len(unique_slugs) > 3:
+        scope = f"cross-service ({len(unique_slugs)} services)"
+    else:
+        scope = "cross-service"
+    return f"{scope}: {reflection_type}"

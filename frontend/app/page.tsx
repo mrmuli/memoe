@@ -27,7 +27,9 @@ type Reflection = {
   id: string;
   created_at: string;
   model_id: string;
+  title: string;
   reflection_type: string;
+  service_slugs: string[];
   confidence: number;
   evidence_quality_rating: string;
   statement: string;
@@ -400,7 +402,7 @@ export default function Home() {
         {!reflectionJob && !latestReflection && newestReflection && (
           <div className="latest-memory muted-memory">
             <div>
-              <strong>Latest reflection</strong>
+              <strong>{newestReflection.title}</strong>
               <span>
                 {new Date(newestReflection.created_at).toLocaleString()} · confidence{" "}
                 {newestReflection.confidence.toFixed(2)}

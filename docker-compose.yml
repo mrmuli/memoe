@@ -31,6 +31,7 @@ services:
       - "8000:8000"
     command: >
       sh -c "uv run memoe database init &&
+      uv run memoe seed load demo &&
       uv run uvicorn memoe.api.app:app --host 0.0.0.0 --port 8000"
 
   frontend:

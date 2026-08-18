@@ -1,0 +1,170 @@
+[
+  {
+    "id": "10081",
+    "key": "PAY-243",
+    "project_id": "10010",
+    "project_key": "PAY",
+    "created": "2026-08-08T10:27:00Z",
+    "updated": "2026-08-08T10:34:00Z",
+    "creator_display_name": "Support Operations",
+    "assignee_display_name": "Payments On Call",
+    "status": "Investigating",
+    "status_category": "In Progress",
+    "priority": "High",
+    "issue_type": "Production Incident",
+    "summary": "Customers report checkout timeouts and slow payment confirmation",
+    "description": "Support has received multiple customer reports that checkout payment confirmation is timing out or taking longer than usual in production. No postmortem link has been added yet.",
+    "labels": [
+      "service:payments",
+      "environment:production",
+      "customer-impact",
+      "checkout",
+      "latency",
+      "postmortem:missing"
+    ],
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout",
+      "environment": "production"
+    }
+  },
+  {
+    "id": "10082",
+    "key": "HELP-991",
+    "project_id": "10022",
+    "project_key": "HELP",
+    "created": "2026-08-08T10:32:00Z",
+    "updated": "2026-08-08T10:36:00Z",
+    "creator_display_name": "Customer Support",
+    "assignee_display_name": "Helpdesk Triage",
+    "status": "Open",
+    "status_category": "To Do",
+    "priority": "Medium",
+    "issue_type": "Support Request",
+    "summary": "User asks how to update notification preferences",
+    "description": "A user contacted support asking where to update email notification preferences. This is not tied to a delivery latency SLO or incident.",
+    "labels": [
+      "service:notifications",
+      "how-to",
+      "account-settings",
+      "not-slo-covered"
+    ],
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "notification-preferences",
+      "environment": "production"
+    }
+  },
+  {
+    "id": "10083",
+    "key": "SEARCH-77",
+    "project_id": "10033",
+    "project_key": "SEARCH",
+    "created": "2026-08-08T11:08:00Z",
+    "updated": "2026-08-08T11:21:00Z",
+    "creator_display_name": "Support Operations",
+    "assignee_display_name": "Search On Call",
+    "status": "Investigating",
+    "status_category": "In Progress",
+    "priority": "High",
+    "issue_type": "Production Incident",
+    "summary": "Customers report empty or partial search results",
+    "description": "Customers report that product search sometimes returns partial results or no results. The ticket includes customer impact but does not include a linked trace or postmortem.",
+    "labels": [
+      "service:search",
+      "environment:production",
+      "customer-impact",
+      "partial-results",
+      "trace:missing",
+      "postmortem:missing"
+    ],
+    "_memoe": {
+      "service_slug": "search",
+      "component": "query-api",
+      "environment": "production"
+    }
+  },
+  {
+    "id": "10084",
+    "key": "ORD-318",
+    "project_id": "10044",
+    "project_key": "ORD",
+    "created": "2026-08-08T11:43:00Z",
+    "updated": "2026-08-08T11:59:00Z",
+    "creator_display_name": "Support Operations",
+    "assignee_display_name": "Orders On Call",
+    "status": "Investigating",
+    "status_category": "In Progress",
+    "priority": "High",
+    "issue_type": "Production Incident",
+    "summary": "Checkout succeeds but order confirmation is delayed",
+    "description": "Customers report successful payment followed by delayed order confirmation. Orders logs show inventory reservation waits, but the incident has no linked distributed trace across orders and inventory.",
+    "labels": [
+      "service:orders",
+      "environment:production",
+      "customer-impact",
+      "dependency:inventory",
+      "trace-link:missing"
+    ],
+    "_memoe": {
+      "service_slug": "orders",
+      "component": "order-create",
+      "environment": "production"
+    }
+  },
+  {
+    "id": "10085",
+    "key": "INV-204",
+    "project_id": "10055",
+    "project_key": "INV",
+    "created": "2026-08-08T11:47:00Z",
+    "updated": "2026-08-08T12:03:00Z",
+    "creator_display_name": "Support Operations",
+    "assignee_display_name": "Inventory On Call",
+    "status": "Investigating",
+    "status_category": "In Progress",
+    "priority": "High",
+    "issue_type": "Production Incident",
+    "summary": "Stock reservation intermittently fails during checkout",
+    "description": "Inventory reservation failures are reported during checkout. Logs show database pool saturation, but trace propagation from orders-api to inventory-service is incomplete.",
+    "labels": [
+      "service:inventory",
+      "environment:production",
+      "customer-impact",
+      "dependency:inventory-db",
+      "trace-propagation:partial"
+    ],
+    "_memoe": {
+      "service_slug": "inventory",
+      "component": "reservation-api",
+      "environment": "production"
+    }
+  },
+  {
+    "id": "10086",
+    "key": "HELP-1002",
+    "project_id": "10022",
+    "project_key": "HELP",
+    "created": "2026-08-08T12:10:00Z",
+    "updated": "2026-08-08T12:12:00Z",
+    "creator_display_name": "Customer Support",
+    "assignee_display_name": "Helpdesk Triage",
+    "status": "Open",
+    "status_category": "To Do",
+    "priority": "Low",
+    "issue_type": "Support Request",
+    "summary": "Customer cannot find saved inventory alert settings",
+    "description": "A customer asks where saved inventory alert preferences are managed. This is customer-facing toil without an associated SLO alarm.",
+    "labels": [
+      "service:inventory",
+      "how-to",
+      "not-slo-covered",
+      "toil"
+    ],
+    "_memoe": {
+      "service_slug": "inventory",
+      "component": "inventory-alert-preferences",
+      "environment": "production"
+    }
+  }
+]

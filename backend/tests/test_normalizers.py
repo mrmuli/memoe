@@ -9,7 +9,7 @@ import pytest
 
 from memoe.normalizers.core import normalize_row
 
-FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "payments"
+FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "demo"
 
 
 def load_fixture(name: str) -> list[dict]:

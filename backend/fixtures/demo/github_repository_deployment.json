@@ -6,10 +6,7 @@
     "commit_sha": "9f2c6b8d0a7f4b1e8c3d2a1f0b9e7c6d5a4f3210",
     "created_at": "2026-08-08T09:50:00Z",
     "updated_at": "2026-08-08T09:53:22Z",
-    "creator": {
-      "login": "sre-release-bot",
-      "type": "Bot"
-    },
+    "creator": {"login": "sre-release-bot", "type": "Bot"},
     "description": "Deploy payments-api v2.8.4 to production.",
     "environment": "production",
     "latest_status": {
@@ -35,10 +32,7 @@
     "commit_sha": "5d8e2c7a4b1f0e9d3c6a2b8f7e1d0c9b4a3f2109",
     "created_at": "2026-08-08T10:00:00Z",
     "updated_at": "2026-08-08T10:04:37Z",
-    "creator": {
-      "login": "platform-release-bot",
-      "type": "Bot"
-    },
+    "creator": {"login": "platform-release-bot", "type": "Bot"},
     "description": "Apply payments infrastructure changes for production cache and gateway routing.",
     "environment": "production",
     "latest_status": {
@@ -64,10 +58,7 @@
     "commit_sha": "7a3e1d9c5b2f4a8e6d0c1b3a9f8e7d6c5b4a3210",
     "created_at": "2026-08-08T10:20:00Z",
     "updated_at": "2026-08-08T10:22:14Z",
-    "creator": {
-      "login": "release-bot",
-      "type": "Bot"
-    },
+    "creator": {"login": "release-bot", "type": "Bot"},
     "description": "Deploy notifications-service v1.14.0 to production.",
     "environment": "production",
     "latest_status": {
@@ -93,10 +84,7 @@
     "commit_sha": "2c1f9e8d7a6b5c4d3e2f1a0b9c8d7e6f5a4b3210",
     "created_at": "2026-08-08T10:40:00Z",
     "updated_at": "2026-08-08T10:43:05Z",
-    "creator": {
-      "login": "sre-release-bot",
-      "type": "Bot"
-    },
+    "creator": {"login": "sre-release-bot", "type": "Bot"},
     "description": "Deploy payments-api v2.8.5 to production with routine dependency updates.",
     "environment": "production",
     "latest_status": {
@@ -112,6 +100,84 @@
     "_memoe": {
       "service_slug": "payments",
       "component": "payments-api",
+      "environment": "production"
+    }
+  },
+  {
+    "id": 8801005,
+    "node_id": "DE_kwDOSearch8801005",
+    "repository_full_name": "mrmuli/search-api",
+    "commit_sha": "a4f1b5c8d9e0f2a3b6c7d8e9f0a1b2c3d4e5f601",
+    "created_at": "2026-08-08T10:52:00Z",
+    "updated_at": "2026-08-08T10:55:40Z",
+    "creator": {"login": "release-bot", "type": "Bot"},
+    "description": "Deploy search-api v3.2.1 enabling catalog fallback v2.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T10:55:40Z",
+      "description": "Deployment completed successfully.",
+      "environment_url": "https://search.example.com"
+    },
+    "payload": "{\"service\":\"search\",\"component\":\"search-api\",\"version\":\"v3.2.1\",\"deployment_source\":\"search-api\",\"change_type\":\"application\",\"feature_flags\":[\"search_fallback_v2\"]}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "search",
+      "component": "search-api",
+      "environment": "production"
+    }
+  },
+  {
+    "id": 8801006,
+    "node_id": "DE_kwDOOrders8801006",
+    "repository_full_name": "mrmuli/orders-api",
+    "commit_sha": "b5f2c6d9e0a1b3c4d7e8f9a0b1c2d3e4f5a60712",
+    "created_at": "2026-08-08T11:25:00Z",
+    "updated_at": "2026-08-08T11:28:18Z",
+    "creator": {"login": "release-bot", "type": "Bot"},
+    "description": "Deploy orders-api v4.9.0 with reservation retry tuning.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T11:28:18Z",
+      "description": "Deployment completed successfully.",
+      "environment_url": "https://orders.example.com"
+    },
+    "payload": "{\"service\":\"orders\",\"component\":\"orders-api\",\"version\":\"v4.9.0\",\"deployment_source\":\"orders-api\",\"change_type\":\"application\",\"changed_resources\":[\"inventory-reservation-retry-timeout\"]}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "orders",
+      "component": "orders-api",
+      "environment": "production"
+    }
+  },
+  {
+    "id": 8801007,
+    "node_id": "DE_kwDOInventory8801007",
+    "repository_full_name": "mrmuli/inventory-service",
+    "commit_sha": "c6f3d7e0a1b2c4d5e8f9a0b1c2d3e4f5a6071823",
+    "created_at": "2026-08-08T11:50:00Z",
+    "updated_at": "2026-08-08T11:53:10Z",
+    "creator": {"login": "release-bot", "type": "Bot"},
+    "description": "Deploy inventory-service v2.12.3 with logging-only reservation diagnostics.",
+    "environment": "production",
+    "latest_status": {
+      "state": "success",
+      "created_at": "2026-08-08T11:53:10Z",
+      "description": "Deployment completed successfully.",
+      "environment_url": "https://inventory.example.com"
+    },
+    "payload": "{\"service\":\"inventory\",\"component\":\"inventory-service\",\"version\":\"v2.12.3\",\"deployment_source\":\"inventory-service\",\"change_type\":\"observability\"}",
+    "ref": "main",
+    "state": "success",
+    "task": "deploy",
+    "_memoe": {
+      "service_slug": "inventory",
+      "component": "inventory-service",
       "environment": "production"
     }
   }

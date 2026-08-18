@@ -1,4 +1,4 @@
-"""LangGraph orchestration for Memoe conversation."""
+"""LangGraph orchestration for Memoe conversations."""
 
 from __future__ import annotations
 
@@ -92,10 +92,11 @@ def build_chat_graph(settings: Settings):
 
     def expand_evidence_detail(state: ChatGraphState) -> dict[str, Any]:
         route = state.get("question_route", {})
-        if not route.get("needs_evidence_detail"):
+        if not route.get("needs_evidence_detail") and route.get("answer_mode") != "ticket_lookup":
             return {"evidence_detail": []}
         evidence = expand_evidence_for_memory(
             retrieved_memory=state.get("retrieved_memory", []),
+            answer_mode=route.get("answer_mode"),
             settings=settings,
         )
         return {"evidence_detail": evidence}
@@ -202,7 +203,7 @@ Do not invent facts or imply causality beyond the evidence.
 Do not say caused or triggered unless the retrieved memory contains conclusive validation. Prefer associated with, followed by, or consistent with.
 Treat retrieved observations and reflections as memory claims with evidence quality, not absolute truth.
 Use working memory as current conversation state, but prefer retrieved memory for factual claims.
-If no service scope is provided, answer across the most relevant services in retrieved memory.
+If no service scope is provided, request the service scope first and if none is provided, answer across the most relevant services in retrieved memory.
 For broad questions, focus on the top relevant services, up to five, instead of asking the user to choose a service.
 Ask for clarification only when the question cannot be answered usefully without a narrower scope.
 

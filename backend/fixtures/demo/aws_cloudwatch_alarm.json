@@ -1,0 +1,137 @@
+[
+  {
+    "name": "payments-latency-burn-rate-high",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:payments-latency-burn-rate-high",
+    "state_value": "ALARM",
+    "state_reason": "p95 latency burn rate exceeded 14x over the 5m window and 6x over the 1h window for Payments checkout requests.",
+    "metric_name": "latency_burn_rate",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 6,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {"Name": "Service", "Value": "payments"},
+      {"Name": "Environment", "Value": "production"},
+      {"Name": "Objective", "Value": "checkout_latency"}
+    ],
+    "alarm_actions": ["arn:aws:sns:eu-west-1:123456789012:payments-reliability-alerts"],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T10:11:00Z",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout-latency-slo",
+      "environment": "production"
+    }
+  },
+  {
+    "name": "notifications-delivery-delay-warning",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:notifications-delivery-delay-warning",
+    "state_value": "ALARM",
+    "state_reason": "Notification delivery delay exceeded warning threshold for the Notifications service.",
+    "metric_name": "delivery_delay_seconds",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 30,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {"Name": "Service", "Value": "notifications"},
+      {"Name": "Environment", "Value": "production"},
+      {"Name": "Objective", "Value": "notification_delivery_latency"}
+    ],
+    "alarm_actions": ["arn:aws:sns:eu-west-1:123456789012:notifications-reliability-alerts"],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T10:18:00Z",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "delivery-latency-slo",
+      "environment": "production"
+    }
+  },
+  {
+    "name": "search-error-rate-burn-rate-high",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:search-error-rate-burn-rate-high",
+    "state_value": "ALARM",
+    "state_reason": "Search API error budget burn exceeded 9x over the 10m window for product search requests.",
+    "metric_name": "error_rate_burn_rate",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 4,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {"Name": "Service", "Value": "search"},
+      {"Name": "Environment", "Value": "production"},
+      {"Name": "Objective", "Value": "search_success_rate"}
+    ],
+    "alarm_actions": ["arn:aws:sns:eu-west-1:123456789012:search-reliability-alerts"],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T11:06:00Z",
+    "_memoe": {
+      "service_slug": "search",
+      "component": "search-success-slo",
+      "environment": "production"
+    }
+  },
+  {
+    "name": "orders-create-latency-warning",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:orders-create-latency-warning",
+    "state_value": "ALARM",
+    "state_reason": "p95 latency for order creation exceeded 1200ms for 3 consecutive periods.",
+    "metric_name": "http_server_duration_p95",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 1200,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {"Name": "Service", "Value": "orders"},
+      {"Name": "Environment", "Value": "production"},
+      {"Name": "Objective", "Value": "order_create_latency"}
+    ],
+    "alarm_actions": ["arn:aws:sns:eu-west-1:123456789012:orders-reliability-alerts"],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T11:39:00Z",
+    "_memoe": {
+      "service_slug": "orders",
+      "component": "order-create-slo",
+      "environment": "production"
+    }
+  },
+  {
+    "name": "inventory-reservation-error-rate-high",
+    "arn": "arn:aws:cloudwatch:eu-west-1:123456789012:alarm:inventory-reservation-error-rate-high",
+    "state_value": "ALARM",
+    "state_reason": "Inventory reservation 5xx rate exceeded 3 percent for 15 minutes.",
+    "metric_name": "http_server_error_rate",
+    "namespace": "Memoe/SLO",
+    "comparison_operator": "GreaterThanThreshold",
+    "threshold": 3,
+    "statistic": "Average",
+    "period": 300,
+    "dimensions": [
+      {"Name": "Service", "Value": "inventory"},
+      {"Name": "Environment", "Value": "production"},
+      {"Name": "Objective", "Value": "reservation_success_rate"}
+    ],
+    "alarm_actions": ["arn:aws:sns:eu-west-1:123456789012:inventory-reliability-alerts"],
+    "actions_enabled": true,
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe_occurred_at": "2026-08-08T11:45:00Z",
+    "_memoe": {
+      "service_slug": "inventory",
+      "component": "reservation-success-slo",
+      "environment": "production"
+    }
+  }
+]

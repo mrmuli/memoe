@@ -1,0 +1,357 @@
+[
+  {
+    "event_id": "payments-log-0001",
+    "timestamp": "2026-08-08T10:08:42Z",
+    "ingestion_time": "2026-08-08T10:08:46Z",
+    "log_group_name": "/aws/ecs/payments-api/production",
+    "log_stream_name": "payments-api/checkout/7f2d9a",
+    "message": "checkout confirmation request completed with elevated latency",
+    "message_json": {
+      "time": "2026-08-08T10:08:42Z",
+      "severity_text": "WARN",
+      "service.name": "payments",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "checkout_request_slow",
+      "http.request.method": "POST",
+      "http.route": "/checkout/confirm",
+      "http.response.status_code": 200,
+      "duration_ms": 1840,
+      "slo.name": "checkout_latency",
+      "trace_id": "trace-pay-20260808-100842",
+      "span_id": "span-pay-100842"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "payments-log-0002",
+    "timestamp": "2026-08-08T10:10:18Z",
+    "ingestion_time": "2026-08-08T10:10:22Z",
+    "log_group_name": "/aws/ecs/payments-api/production",
+    "log_stream_name": "payments-api/checkout/7f2d9a",
+    "message": "checkout confirmation request failed after waiting for payment gateway",
+    "message_json": {
+      "time": "2026-08-08T10:10:18Z",
+      "severity_text": "ERROR",
+      "service.name": "payments",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "checkout_gateway_timeout",
+      "http.request.method": "POST",
+      "http.route": "/checkout/confirm",
+      "http.response.status_code": 504,
+      "error.type": "GatewayTimeout",
+      "duration_ms": 5000,
+      "peer.service": "payment-gateway",
+      "trace_id": "trace-pay-20260808-101018",
+      "span_id": "span-pay-101018"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "payments-log-0003",
+    "timestamp": "2026-08-08T10:12:06Z",
+    "ingestion_time": "2026-08-08T10:12:10Z",
+    "log_group_name": "/aws/ecs/payments-api/production",
+    "log_stream_name": "payments-api/checkout/7f2d9a",
+    "message": "checkout cache lookup exceeded timeout budget",
+    "message_json": {
+      "time": "2026-08-08T10:12:06Z",
+      "severity_text": "ERROR",
+      "service.name": "payments",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "checkout_cache_timeout",
+      "http.request.method": "POST",
+      "http.route": "/checkout/confirm",
+      "http.response.status_code": 504,
+      "error.type": "CacheTimeout",
+      "duration_ms": 4800,
+      "peer.service": "checkout-cache",
+      "trace_id": "trace-pay-20260808-101206",
+      "span_id": "span-pay-101206"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "payments",
+      "component": "checkout-cache",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "notifications-log-0001",
+    "timestamp": "2026-08-08T10:17:45Z",
+    "ingestion_time": "2026-08-08T10:17:50Z",
+    "log_group_name": "/aws/ecs/notifications-service/production",
+    "log_stream_name": "notifications-service/delivery/53cc1b",
+    "message": "notification delivery queue age exceeded warning threshold",
+    "message_json": {
+      "time": "2026-08-08T10:17:45Z",
+      "severity_text": "WARN",
+      "service.name": "notifications",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "delivery_queue_age_warning",
+      "messaging.system": "sqs",
+      "messaging.destination.name": "notifications-delivery",
+      "queue_age_seconds": 38,
+      "trace_id": "trace-notif-20260808-101745",
+      "span_id": "span-notif-101745"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "delivery-worker",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "search-log-0001",
+    "timestamp": "2026-08-08T11:01:30Z",
+    "ingestion_time": "2026-08-08T11:01:34Z",
+    "log_group_name": "/aws/ecs/search-api/production",
+    "log_stream_name": "search-api/query/91ab2f",
+    "message": "search dependency call to catalog timed out",
+    "message_json": {
+      "time": "2026-08-08T11:01:30Z",
+      "severity_text": "ERROR",
+      "service.name": "search",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "catalog_dependency_timeout",
+      "http.request.method": "GET",
+      "http.route": "/search",
+      "http.response.status_code": 503,
+      "error.type": "DependencyTimeout",
+      "duration_ms": 3000,
+      "peer.service": "catalog-api",
+      "trace_id": "trace-search-20260808-110130",
+      "span_id": "span-search-110130"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "search",
+      "component": "query-api",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "search-log-0002",
+    "timestamp": "2026-08-08T11:04:20Z",
+    "ingestion_time": "2026-08-08T11:04:25Z",
+    "log_group_name": "/aws/ecs/search-api/production",
+    "log_stream_name": "search-api/query/91ab2f",
+    "message": "search fallback returned partial results",
+    "message_json": {
+      "time": "2026-08-08T11:04:20Z",
+      "severity_text": "WARN",
+      "service.name": "search",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "partial_search_results",
+      "http.request.method": "GET",
+      "http.route": "/search",
+      "http.response.status_code": 206,
+      "feature.flag": "search_fallback_v2",
+      "trace_id": "trace-search-20260808-110420",
+      "span_id": "span-search-110420"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "search",
+      "component": "query-api",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "orders-log-0001",
+    "timestamp": "2026-08-08T11:34:10Z",
+    "ingestion_time": "2026-08-08T11:34:15Z",
+    "log_group_name": "/aws/ecs/orders-api/production",
+    "log_stream_name": "orders-api/create/33fa9c",
+    "message": "order creation waiting on inventory reservation",
+    "message_json": {
+      "time": "2026-08-08T11:34:10Z",
+      "severity_text": "WARN",
+      "service.name": "orders",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "inventory_reservation_slow",
+      "http.request.method": "POST",
+      "http.route": "/orders",
+      "http.response.status_code": 202,
+      "duration_ms": 1420,
+      "peer.service": "inventory",
+      "trace_id": "trace-orders-20260808-113410",
+      "span_id": "span-orders-113410"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "orders",
+      "component": "order-create",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "orders-log-0002",
+    "timestamp": "2026-08-08T11:37:45Z",
+    "ingestion_time": "2026-08-08T11:37:50Z",
+    "log_group_name": "/aws/ecs/orders-api/production",
+    "log_stream_name": "orders-api/create/33fa9c",
+    "message": "order creation failed after inventory reservation timeout",
+    "message_json": {
+      "time": "2026-08-08T11:37:45Z",
+      "severity_text": "ERROR",
+      "service.name": "orders",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "order_create_inventory_timeout",
+      "http.request.method": "POST",
+      "http.route": "/orders",
+      "http.response.status_code": 503,
+      "error.type": "InventoryTimeout",
+      "duration_ms": 5000,
+      "peer.service": "inventory",
+      "trace_id": "trace-shared-inventory-20260808-113745",
+      "span_id": "span-orders-113745"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "orders",
+      "component": "order-create",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "inventory-log-0001",
+    "timestamp": "2026-08-08T11:35:50Z",
+    "ingestion_time": "2026-08-08T11:35:54Z",
+    "log_group_name": "/aws/ecs/inventory-service/production",
+    "log_stream_name": "inventory-service/reservations/aa42c0",
+    "message": "inventory reservation query pool saturation",
+    "message_json": {
+      "time": "2026-08-08T11:35:50Z",
+      "severity_text": "WARN",
+      "service.name": "inventory",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "reservation_db_pool_saturation",
+      "db.system": "postgresql",
+      "db.operation": "SELECT",
+      "db.connection.pool.used": 48,
+      "db.connection.pool.max": 50,
+      "trace_id": "trace-shared-inventory-20260808-113550",
+      "span_id": "span-inventory-113550"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "inventory",
+      "component": "reservation-db",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "inventory-log-0002",
+    "timestamp": "2026-08-08T11:42:20Z",
+    "ingestion_time": "2026-08-08T11:42:24Z",
+    "log_group_name": "/aws/ecs/inventory-service/production",
+    "log_stream_name": "inventory-service/reservations/aa42c0",
+    "message": "inventory reservation failed while checking stock",
+    "message_json": {
+      "time": "2026-08-08T11:42:20Z",
+      "severity_text": "ERROR",
+      "service.name": "inventory",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "reservation_stock_check_failed",
+      "http.request.method": "POST",
+      "http.route": "/inventory/reservations",
+      "http.response.status_code": 500,
+      "error.type": "DatabaseTimeout",
+      "peer.service": "inventory-db",
+      "trace_id": "trace-shared-inventory-20260808-113745",
+      "span_id": "span-inventory-114220"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "inventory",
+      "component": "reservation-api",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "notifications-log-0002",
+    "timestamp": "2026-08-08T10:19:10Z",
+    "ingestion_time": "2026-08-08T10:19:18Z",
+    "log_group_name": "/aws/ecs/notifications-service/production",
+    "log_stream_name": "notifications-service/delivery/53cc1b",
+    "message": "delivery worker retry count unavailable because retry metric was not emitted",
+    "message_json": {
+      "time": "2026-08-08T10:19:10Z",
+      "severity_text": "WARN",
+      "service.name": "notifications",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "delivery_retry_metric_missing",
+      "messaging.system": "sqs",
+      "messaging.destination.name": "notifications-delivery",
+      "otel.instrumentation_status": "missing_trace_context",
+      "otel.gap": "retry_count_metric_not_emitted"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "notifications",
+      "component": "delivery-worker",
+      "environment": "production"
+    }
+  },
+  {
+    "event_id": "orders-log-0003",
+    "timestamp": "2026-08-08T11:38:30Z",
+    "ingestion_time": "2026-08-08T11:38:36Z",
+    "log_group_name": "/aws/ecs/orders-api/production",
+    "log_stream_name": "orders-api/create/33fa9c",
+    "message": "orders could not link inventory timeout to downstream reservation span",
+    "message_json": {
+      "time": "2026-08-08T11:38:30Z",
+      "severity_text": "WARN",
+      "service.name": "orders",
+      "service.namespace": "commerce",
+      "deployment.environment": "production",
+      "event.name": "inventory_span_link_missing",
+      "http.request.method": "POST",
+      "http.route": "/orders",
+      "peer.service": "inventory",
+      "otel.instrumentation_status": "partial_trace_context",
+      "otel.gap": "missing_downstream_span_link"
+    },
+    "region": "eu-west-1",
+    "account_id": "123456789012",
+    "_memoe": {
+      "service_slug": "orders",
+      "component": "order-create",
+      "environment": "production"
+    }
+  }
+]
