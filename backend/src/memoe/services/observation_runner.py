@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +17,8 @@ from memoe.db.connection import connect
 from memoe.providers.bedrock import BedrockObservationProvider
 from memoe.providers.observations import ObservationRequest, ObservationResult
 from memoe.providers.ollama import OllamaObservationProvider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -77,6 +81,12 @@ def run_observation(
     resolved_settings = settings or Settings()
     provider = create_observation_provider(provider_name, resolved_settings)
     model_id = resolve_model_id(provider_name, resolved_settings)
+    logger.info(
+        "observation_run.start service_slug=%s provider=%s model_id=%s",
+        service_slug,
+        provider_name,
+        model_id,
+    )
 
     with connect(resolved_settings) as connection:
         service = fetch_service(connection, service_slug)
@@ -85,6 +95,13 @@ def run_observation(
 
         if not evidence:
             raise ValueError(f"No evidence found for service: {service_slug}")
+
+        evidence_summary = summarize_evidence_for_logs(evidence)
+        logger.info(
+            "observation_run.evidence_loaded service_slug=%s evidence_summary=%s",
+            service_slug,
+            evidence_summary,
+        )
 
         request_payload = {
             "procedure": {
@@ -111,6 +128,17 @@ def run_observation(
     )
 
     try:
+        logger.info(
+            "observation_run.provider_request run_id=%s service_slug=%s procedure=%s:%s "
+            "provider=%s model_id=%s evidence_summary=%s",
+            run_id,
+            service_slug,
+            request.procedure_name,
+            request.procedure_version,
+            provider_name,
+            model_id,
+            evidence_summary,
+        )
         result = provider.generate_observation(request)
         validate_evidence_ids(result, evidence)
         with connect(resolved_settings) as connection:
@@ -123,9 +151,26 @@ def run_observation(
                 result=result,
                 evidence=evidence,
             )
+        logger.info(
+            "observation_run.completed run_id=%s observation_id=%s service_slug=%s "
+            "confidence=%s evidence_quality=%s supporting_evidence=%s rejected_evidence=%s",
+            run_id,
+            observation_id,
+            service_slug,
+            result.confidence,
+            result.evidence_quality.get("rating", "unknown"),
+            len(result.supporting_evidence_ids),
+            len(result.rejected_evidence_ids),
+        )
     except Exception as error:
         with connect(resolved_settings) as connection:
             mark_observation_run_failed(connection, run_id, str(error))
+        logger.exception(
+            "observation_run.failed run_id=%s service_slug=%s provider=%s",
+            run_id,
+            service_slug,
+            provider_name,
+        )
         raise
 
     return ObservationRunResult(
@@ -359,6 +404,32 @@ def persist_observation_result(
         insert_observation_evidence(connection, run_id, observation_id, event_id, "rejected")
 
     return observation_id
+
+
+def summarize_evidence_for_logs(evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize observation evidence without logging raw source payload content."""
+    occurred_at_values = sorted(str(row["occurred_at"]) for row in evidence if row.get("occurred_at"))
+    return {
+        "total": len(evidence),
+        "source_tables": compact_counter(row.get("source_table") for row in evidence),
+        "categories": compact_counter(row.get("category") for row in evidence),
+        "event_types": compact_counter(row.get("event_type") for row in evidence),
+        "components": compact_counter(row.get("component") for row in evidence),
+        "time_range": {
+            "start": occurred_at_values[0] if occurred_at_values else None,
+            "end": occurred_at_values[-1] if occurred_at_values else None,
+        },
+    }
+
+
+def compact_counter(values, limit: int = 8) -> dict[str, int]:
+    """Count non-empty values and cap the number of keys shown in logs."""
+    counter = Counter(str(value) for value in values if value)
+    most_common = dict(counter.most_common(limit))
+    remaining = sum(counter.values()) - sum(most_common.values())
+    if remaining:
+        most_common["other"] = remaining
+    return most_common
 
 
 def observation_signature(

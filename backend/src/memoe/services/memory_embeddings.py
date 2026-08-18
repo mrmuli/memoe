@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -21,6 +23,7 @@ EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 BGE_EMBEDDING_DIMENSIONS = 384
 BGE_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_\-:.]*")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,9 +56,24 @@ def refresh_memory_embeddings(settings: Settings | None = None) -> EmbeddingRefr
     resolved_settings = settings or Settings()
     embedded = 0
     counts = {"observation": 0, "reflection": 0, "validation_result": 0}
+    provider = resolved_settings.embedding_provider.lower()
+    model_id = embedding_model_id(resolved_settings)
+    dimensions = embedding_dimensions(resolved_settings)
+    logger.info(
+        "memory_embeddings.refresh.start provider=%s model_id=%s dimensions=%s",
+        provider,
+        model_id,
+        dimensions,
+    )
 
     with connect(resolved_settings) as connection:
         rows = fetch_memory_rows(connection)
+        row_counts = Counter(str(row["memory_type"]) for row in rows)
+        logger.info(
+            "memory_embeddings.refresh.rows_loaded total=%s counts=%s",
+            len(rows),
+            dict(row_counts),
+        )
         for row in rows:
             embedding = embed_text(row["embedded_text"], resolved_settings)
             upsert_memory_embedding(
@@ -70,6 +88,15 @@ def refresh_memory_embeddings(settings: Settings | None = None) -> EmbeddingRefr
             embedded += 1
             counts[row["memory_type"]] += 1
 
+    logger.info(
+        "memory_embeddings.refresh.completed embedded=%s observations=%s reflections=%s "
+        "validation_results=%s model_id=%s",
+        embedded,
+        counts["observation"],
+        counts["reflection"],
+        counts["validation_result"],
+        model_id,
+    )
     return EmbeddingRefreshResult(
         embedded=embedded,
         observations=counts["observation"],
@@ -202,6 +229,15 @@ def search_memory(
     resolved_settings = settings or Settings()
     dimensions = embedding_dimensions(resolved_settings)
     model_id = embedding_model_id(resolved_settings)
+    logger.info(
+        "memory_embeddings.search.start model_id=%s dimensions=%s service_scope=%s limit=%s "
+        "query_chars=%s",
+        model_id,
+        dimensions,
+        service_scope,
+        limit,
+        len(goal),
+    )
     query_embedding = vector_literal(embed_query(goal, resolved_settings))
     candidate_limit = max(limit * 4, 20)
 
@@ -226,7 +262,14 @@ def search_memory(
 
     scored = [score_memory_row(row, goal, service_scope) for row in rows]
     scored.sort(key=lambda row: row.hybrid_score, reverse=True)
-    return scored[:limit]
+    results = scored[:limit]
+    logger.info(
+        "memory_embeddings.search.completed model_id=%s candidates=%s returned=%s",
+        model_id,
+        len(rows),
+        len(results),
+    )
+    return results
 
 
 def score_memory_row(
@@ -290,13 +333,22 @@ def embed_query(text: str, settings: Settings) -> list[float]:
 
 def embed_text_with_bedrock(text: str, settings: Settings) -> list[float]:
     """Generate a Titan text embedding with Bedrock."""
+    model_id = embedding_model_id(settings)
+    dimensions = embedding_dimensions(settings)
+    logger.info(
+        "bedrock.titan_embedding.request model_id=%s dimensions=%s normalize=%s text_chars=%s",
+        model_id,
+        dimensions,
+        settings.bedrock_embedding_normalize,
+        len(text),
+    )
     body = {
         "inputText": text,
-        "dimensions": embedding_dimensions(settings),
+        "dimensions": dimensions,
         "normalize": settings.bedrock_embedding_normalize,
     }
     response = bedrock_runtime_client(settings).invoke_model(
-        modelId=embedding_model_id(settings),
+        modelId=model_id,
         body=json.dumps(body),
         accept="application/json",
         contentType="application/json",
@@ -306,6 +358,11 @@ def embed_text_with_bedrock(text: str, settings: Settings) -> list[float]:
     if not isinstance(embedding, list):
         raise TypeError("Bedrock Titan embedding response did not include an embedding list.")
 
+    logger.info(
+        "bedrock.titan_embedding.response model_id=%s embedding_dimensions=%s",
+        model_id,
+        len(embedding),
+    )
     return [float(value) for value in embedding]
 
 
@@ -315,6 +372,12 @@ def embed_text_with_tei(text: str, settings: Settings, input_type: str) -> list[
     if input_type == "query" and settings.tei_query_instruction:
         input_text = settings.tei_query_instruction + text
 
+    logger.info(
+        "tei.embedding.request model_id=%s input_type=%s text_chars=%s",
+        embedding_model_id(settings),
+        input_type,
+        len(input_text),
+    )
     response = httpx.post(
         f"{settings.tei_base_url.rstrip('/')}/embed",
         json={"inputs": input_text},
@@ -329,6 +392,11 @@ def embed_text_with_tei(text: str, settings: Settings, input_type: str) -> list[
     if not isinstance(embedding, list):
         raise TypeError("TEI embedding response did not include an embedding list.")
 
+    logger.info(
+        "tei.embedding.response model_id=%s embedding_dimensions=%s",
+        embedding_model_id(settings),
+        len(embedding),
+    )
     return [float(value) for value in embedding]
 
 

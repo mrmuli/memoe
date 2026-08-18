@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from typing import Any
 
@@ -29,6 +30,11 @@ from memoe.services.reflection_jobs import (
     run_reflection_job,
 )
 from memoe.services.reflection_runner import list_reflections
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 app = FastAPI(title="Memoe API", version="0.1.0")
 

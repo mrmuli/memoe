@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from memoe.services.observation_runner import observation_signature
+from memoe.services.observation_runner import observation_signature, summarize_evidence_for_logs
 
 
 def test_observation_signature_uses_service_type_and_sorted_supporting_evidence() -> None:
@@ -57,3 +57,41 @@ def test_observation_signature_falls_back_to_normalized_statement_without_eviden
     )
 
     assert first == second
+
+
+def test_summarize_evidence_for_logs_keeps_only_high_level_fields() -> None:
+    """Observation logs should describe evidence shape without raw event payloads."""
+    summary = summarize_evidence_for_logs(
+        [
+            {
+                "source_table": "jira_issue",
+                "category": "outcome",
+                "event_type": "customer_report_opened",
+                "component": "checkout-api",
+                "occurred_at": "2026-08-08T10:27:00+00:00",
+                "summary": "Customer cannot complete payment",
+                "metadata": {"description": "Full ticket text"},
+            },
+            {
+                "source_table": "aws_cloudwatch_alarm",
+                "category": "signal",
+                "event_type": "slo_burn_rate_alarm",
+                "component": "checkout-api",
+                "occurred_at": "2026-08-08T10:11:00+00:00",
+                "summary": "Latency burn rate high",
+                "metadata": {"state_reason": "Raw CloudWatch reason"},
+            },
+        ]
+    )
+
+    assert summary == {
+        "total": 2,
+        "source_tables": {"jira_issue": 1, "aws_cloudwatch_alarm": 1},
+        "categories": {"outcome": 1, "signal": 1},
+        "event_types": {"customer_report_opened": 1, "slo_burn_rate_alarm": 1},
+        "components": {"checkout-api": 2},
+        "time_range": {
+            "start": "2026-08-08T10:11:00+00:00",
+            "end": "2026-08-08T10:27:00+00:00",
+        },
+    }
