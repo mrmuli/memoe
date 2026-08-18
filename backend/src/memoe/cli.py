@@ -294,7 +294,7 @@ def reflections_list(
                     row.id,
                     row.created_at,
                     row.model_id,
-                    row.reflection_type,
+                    row.title,
                     f"confidence={row.confidence}",
                     f"quality={row.evidence_quality_rating}",
                     row.statement,

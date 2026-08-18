@@ -27,7 +27,9 @@ type Reflection = {
   id: string;
   created_at: string;
   model_id: string;
+  title: string;
   reflection_type: string;
+  service_slugs: string[];
   confidence: number;
   evidence_quality_rating: string;
   statement: string;
@@ -180,7 +182,7 @@ export default function MemoryPage() {
               ? reflections.map((reflection) => (
                   <MemoryCard
                     key={reflection.id}
-                    title={reflection.reflection_type}
+                    title={reflection.title}
                     label={`${reflection.evidence_quality_rating} · seen ${
                       reflection.occurrence_count ?? 1
                     }x · ${formatDate(reflection.last_seen_at ?? reflection.created_at)}`}

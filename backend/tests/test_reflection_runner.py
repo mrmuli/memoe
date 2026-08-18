@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from memoe.services.reflection_runner import reflection_signature
+from memoe.services.reflection_runner import reflection_signature, reflection_title
 
 
 def test_reflection_signature_uses_sorted_supporting_evidence_ids() -> None:
@@ -51,3 +51,26 @@ def test_reflection_signature_keeps_reflection_type_distinct() -> None:
     )
 
     assert detection != recovery
+
+
+def test_reflection_title_names_single_service_scope() -> None:
+    """Single-service reflection titles should make the service obvious."""
+    assert reflection_title("recurring_pattern", ["orders"]) == "orders service: recurring_pattern"
+
+
+def test_reflection_title_names_small_cross_service_scope() -> None:
+    """Small cross-service reflection titles should list the service slugs."""
+    assert (
+        reflection_title("dependency_risk", ["inventory", "orders"])
+        == "inventory + orders: dependency_risk"
+    )
+
+
+def test_reflection_title_summarizes_large_cross_service_scope() -> None:
+    """Large cross-service reflection titles should stay compact."""
+    title = reflection_title(
+        "detection_gap",
+        ["payments", "orders", "inventory", "notifications", "search"],
+    )
+
+    assert title == "cross-service (5 services): detection_gap"
