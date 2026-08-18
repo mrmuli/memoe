@@ -33,7 +33,7 @@ The backend container reads `.env` and mounts your local AWS config from `~/.aws
 To refresh the seeded evidence manually:
 
 ```bash
-docker compose exec backend uv run memoe seed load payments
+docker compose exec backend uv run memoe seed load demo
 ```
 
 Stop the stack:
