@@ -11,7 +11,7 @@ Operational memory for SRE intelligence.
 Start the full Docker Compose demo stack:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 The backend initializes the CockroachDB schema and loads the demo fixture scenario on startup.
