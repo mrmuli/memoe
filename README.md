@@ -123,35 +123,6 @@ More recording guidance is in [docs/demo-script.md](docs/demo-script.md).
 
 ![Memoe ingestion architecture](docs/assets/memoe-ingestion-architecture.png)
 
-```text
-Steampipe-shaped fixtures
-  GitHub pull requests and deployments
-  Jira issues
-  CloudWatch alarms and log events
-        |
-        v
-FastAPI ingestion and normalization
-        |
-        v
-CockroachDB
-  events
-  observations
-  reflections
-  observation_evidence
-  reflection_observations
-  memory_embeddings
-        |
-        v
-Bedrock reasoning
-  observations
-  reflections
-  chat answers
-        |
-        v
-Titan embeddings + CockroachDB vector search
-  memory retrieval for chat and reflection
-```
-
 Memoe stores source-shaped evidence and normalized events in CockroachDB. Observations and reflections are also stored in CockroachDB and linked back to supporting evidence. Embeddings are stored in `memory_embeddings`, allowing chat and reflection to retrieve relevant memory through CockroachDB vector search.
 
 The local demo starts from fixtures, but the intended production ingestion path is event-driven:
